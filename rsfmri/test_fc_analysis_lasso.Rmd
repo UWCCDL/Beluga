@@ -345,7 +345,8 @@ ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha), col=Condition) +
   annotate("text", x=20, y=0.20,
            label=paste("r =", round(cor(Y, prediction), 5))) +
   theme_pander() +
-  ylab(expression(paste("Rate of Forgetting ", alpha))) +
+  ylab(expression("Symmetry Span")) +
+  #ylab(expression(paste("Rate of Forgetting ", alpha))) +
   theme(axis.text.x = element_text(angle=90, hjust=1, size = 8))
 
 ```
