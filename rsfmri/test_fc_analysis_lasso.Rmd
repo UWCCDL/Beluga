@@ -227,12 +227,12 @@ NOI <- c(
   # "Uncertain",
   # "Sensory/somatomotor Hand",
   # "Sensory/somatomotor Mouth",
-  # "Cingulo-opercular Task Control",
+   "Cingulo-opercular Task Control",
   # "Auditory",
-  # "Default mode",
-  # "Memory retrieval?",
+   "Default mode",
+   "Memory retrieval?",
   # "Ventral attention",
-   "Visual",
+  # "Visual",
    "Fronto-parietal Task Control",
   #"Salience"
   "Subcortical"
@@ -286,37 +286,34 @@ Note that we could not measure $alpha$ for all participants, so we have to keep 
 
 ```{r}
 dvs <- read.table("participants.tsv", sep="\t", header=T)
-keep <- !is.na(dvs$SymmetrySpan)  & !dvs$Subject %in% NOFLY
-Y <- dvs$SymmetrySpan[keep]
+keep <- !is.na(dvs$Alpha)  & !dvs$Subject %in% NOFLY
+Y <- dvs$Alpha[keep]
 X <- X[keep,]
 ```
 
 # Lasso part
 
 
-## Lasso
+## Defining the model
 
 ```{r}
 fit <- glmnet(y = Y,
-               x = X,
+              x = X,
               alpha=1,
               standardize = T
-               )
+)
 
 fit.cv <- cv.glmnet(y = Y,
-                     x = X,
+                    x = X,
                     alpha=1,
                     standardize=T,
-                     nfolds=length(Y)
-                     #lambda=exp(seq(-13, -6.5, 0.25)))
-                     #nlambda = 50,
-                     #lambda.factor = 0.05
-                     )
-plot(fit.cv)
+                    nfolds=length(Y)
+)
 
+plot(fit.cv)
 plot(fit, sub="Beta Values for Connectivity")
 
-L1norm <- sum(abs(fit$beta[, which(fit$lambda==fit.cv$lambda.min)]))
+L1norm <- sum(abs(fit$beta[,which(fit$lambda==fit.cv$lambda.min)]))
 abline(v=L1norm, lwd=2, lty=2)
 ```
 
@@ -362,6 +359,6 @@ connectome <- order %>%
   inner_join(conn_betas) %>%
   filter(Beta != 0)
 
-write_csv(connectome, file="symmetryspan.csv")
-save(fit, fit.cv, X, Y, order, I, G, file="symmetryspan.RData")
+write_csv(connectome, file="alpha3.csv")
+save(fit, fit.cv, X, Y, order, I, G, file="alpha3.RData")
 ```

@@ -38,3 +38,16 @@ ggplot(by_subj, aes(x=alpha)) +
   geom_histogram(binwidth=0.01, col="white") +
   theme_pander()
 
+ggplot(by_item, aes(x=alpha, col=alpha)) +
+  geom_histogram(binwidth=0.025, fill="grey50", alpha=0.75, col="white") +
+  facet_wrap(~subj) +
+  xlab(expression(paste("Rate of Forgetting ", alpha))) +
+  xlim(0.25, 0.55) +
+  ylim(0,15) +
+  ylab("Numer of Items") +
+  geom_segment(data=by_subj, x=by_subj$alpha, y=0,
+               xend=by_subj$alpha, yend=15,
+               lty=1, lwd=0.75) +
+  scale_color_viridis(option="plasma") +
+  ggtitle("Beluga: Individual Items and RoF By Subject") +
+  theme_pander()
