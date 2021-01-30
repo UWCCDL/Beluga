@@ -224,23 +224,25 @@ Now, we can restrict the analysis only to a limited set of networks (and their c
 
 ```{r}
 NOI <- c(
-  # "Uncertain",
+   #"Uncertain",
   # "Sensory/somatomotor Hand",
   # "Sensory/somatomotor Mouth",
    "Cingulo-opercular Task Control",
   # "Auditory",
    "Default mode",
    "Memory retrieval?",
-  # "Ventral attention",
+   "Ventral attention",
   # "Visual",
    "Fronto-parietal Task Control",
-  #"Salience"
-  "Subcortical"
+  #"Salience",
+  "Subcortical",
   #"Cerebellar",
-  # "Dorsal attention"
+   "Dorsal attention"
 )
 
-COI <- outer(NOI, NOI, function(x, y) {paste(x, y, sep="-")}) %>% as.vector()
+COI <- outer(NOI, 
+             NOI, 
+             function(x, y) {paste(x, y, sep="-")}) %>% as.vector()
 ```
 
 
@@ -249,7 +251,9 @@ Now, we need to remove some columns from the hyper-large X matrix, and define pr
 ```{r}
 # Here we simplify create a tibble which the X columns, and create a censor column to decide which ones to keep
 # If ROI1 = i and ROI2 = j, we keep column <i,j> IFF i < j.  This should keep the lower triangle.
-censor <- outer(power2011$ROI, power2011$ROI, function(x, y) {x < y}) %>% as.vector()
+censor <- outer(power2011$ROI, 
+                power2011$ROI, 
+                function(x, y) {x < y}) %>% as.vector()
 
 order <- tibble(index = 1:length(nets), 
                 network = nets, 
@@ -268,10 +272,6 @@ G <- order %>%
   filter(censor == TRUE) %>%
   filter(network_names %in% COI) %>%
   dplyr::select(network) 
-```  
-
-
-```{r}
 # G is the real grouping factor for Lasso!
 
 # The real X:
@@ -353,11 +353,10 @@ ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha), col=Condition) +
 ```{r}
 betas <- fit$beta[, which(fit$lambda==fit.cv$lambda.min)]
 conn_betas <- as_tibble(data.frame(index=I$index, Beta=betas))
-
 connectome <- order %>%
-  filter(index %in% I$index) %>%
-  inner_join(conn_betas) %>%
-  filter(Beta != 0)
+   filter(index %in% I$index) %>%
+   inner_join(conn_betas) %>%
+   filter(Beta != 0)
 
 write_csv(connectome, file="alpha3.csv")
 save(fit, fit.cv, X, Y, order, I, G, file="alpha3.RData")
