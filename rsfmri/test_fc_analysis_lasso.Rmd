@@ -291,6 +291,25 @@ Y <- dvs$Alpha[keep]
 X <- X[keep,]
 ```
 
+And now, let's visualize the historgram of the dependent variable we are trying to predict:
+
+```{r}
+dependent <- as_tibble(data.frame(alpha=Y))
+d3 <- pal_d3()
+kol = d3(7)
+
+ggplot(dependent, aes(x=alpha, fill=cut(alpha, 7))) +
+  geom_histogram(bins=8, col="white", alpha=0.5) +
+  scale_fill_viridis(option = "plasma", discrete=T) +
+  geom_vline(xintercept = mean(dependent$alpha)) +
+  xlab(expression(paste("Rate of Forgetting ", alpha)))+
+  ylab("Number of Participants") +
+  ggtitle("Distribution of Rates of Forgetting") +
+  theme_pander() +
+  theme(legend.position = "none")
+
+```
+
 # Lasso part
 
 
@@ -317,6 +336,23 @@ L1norm <- sum(abs(fit$beta[,which(fit$lambda==fit.cv$lambda.min)]))
 abline(v=L1norm, lwd=2, lty=2)
 ```
 
+And now, plot prettier version
+
+```{r}
+lasso_df <- as_tibble(data.frame(lambda=fit.cv$lambda, error=fit.cv$cvm, sd=fit.cv$cvsd))
+
+ggplot(lasso_df, aes(x=lambda, y=error)) +
+  geom_line(aes(col=error), lwd=2) +
+  scale_color_viridis(option = "plasma") +
+  geom_ribbon(aes(ymin=error -sd, ymax=error + sd), alpha=0.2,fill="blue") +
+  xlab(expression(lambda)) +
+  ylab("Cross-Validation Error") +
+  ggtitle(expression(paste(bold("Cross Validation Error Across "), lambda))) +
+  geom_vline(xintercept = lasso_df$lambda[lasso_df$error==min(lasso_df$error)]) +
+  theme_pander() +
+  theme(legend.position="right")
+```
+
 ### Predicted vs. Observed
 
 ```{r}
@@ -335,16 +371,19 @@ predicted <- tibble(Subject = dvs$Subject[keep],
 
 comparison <- as_tibble(rbind(observed, predicted))
 
-ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha), col=Condition) +
-  geom_point(aes(col=Condition)) +
+ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha, col=Condition)) +
+  geom_point(aes(col=Condition), size=4, alpha=0.8) +
   geom_line(alpha=0.5, lty=0.2) +
-  xlab("Subject")+
-  annotate("text", x=20, y=0.20,
-           label=paste("r =", round(cor(Y, prediction), 5))) +
+  scale_color_d3() +
+  xlab("Participant")+
+  ggtitle("Predicted vs. Observed Rates of Forgetting") +
+  annotate("text", x=20, y=0.35,
+           label=paste("r(33) =", round(cor(Y, prediction), 3))) +
   theme_pander() +
-  ylab(expression("Symmetry Span")) +
-  #ylab(expression(paste("Rate of Forgetting ", alpha))) +
-  theme(axis.text.x = element_text(angle=90, hjust=1, size = 8))
+  #ylab(expression("Symmetry Span")) +
+  ylab(expression(paste("Rate of Forgetting ", alpha))) +
+  theme(axis.text.x = element_text(angle=45, hjust=1, size = 8)) +
+  theme(legend.position="bottom")
 
 ```
 
