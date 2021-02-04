@@ -12,9 +12,15 @@ library(ggplot2)
 library(ggthemes)
 library(ppcor)
 library(reshape2)
-library(gglasso)
+#library(gglasso)
 library(glmnet)
+library(ggsci)
 library(viridis)
+library(ggExtra)
+library(kableExtra)
+library(xtable)
+#library(data.table)
+
 ```
 
 # Test Functional Connectivity Pipeline
@@ -26,7 +32,7 @@ This is a test of the FC pipeline.
 First, let's load the Power 2011 region database. This will be used as an "atlas" throughout, to guide the development of the regions.
 
 ```{r}
-power2011 <- read_csv("bin/power_2011.csv", 
+power2011 <- read_csv("../rsfmri/bin/power_2011.csv", 
                       col_types = cols(ROI=col_double(),
                                        X = col_double(),
                                        Y = col_double(),
@@ -186,7 +192,7 @@ nets %<>% as.vector
 netnames <- outer(power2011$Network, power2011$Network, vconnection_name2)
 netnames %<>% as.vector
 
-n <- length(grep("sub-*", dir()))
+n <- length(grep("sub-*", dir("../rsfmri/")))
 X <- matrix(data = rep(0, length(cols)*n), nrow =  n)
 
 j <- 1
@@ -194,8 +200,8 @@ j <- 1
 R <- NULL
 PR <- NULL
 
-for (sub in dir()[grep("sub-*", dir())]) {
-  M <- read.table(paste(sub, "PR.txt", sep="/"))
+for (sub in dir("../rsfmri/")[grep("sub-*", dir("../rsfmri/"))]) {
+  M <- read.table(paste("../rsfmri", sub, "PR.txt", sep="/"))
   v <- as_vector(M)  # v spreads M column-wise. M is symmetrical, so it should not matter, but better not risk it
   #print(c(length(v), mean(v)))
   X[j,] <- v
@@ -285,7 +291,7 @@ Now we need to load the dependent variable. In this case, it is the rate of forg
 Note that we could not measure $alpha$ for all participants, so we have to keep track of which rows in the $X$ regressor matrix we want to exclude from our Lasso analysis.
 
 ```{r}
-dvs <- read.table("participants.tsv", sep="\t", header=T)
+dvs <- read.table("../rsfmri/participants.tsv", sep="\t", header=T)
 keep <- !is.na(dvs$Alpha)  & !dvs$Subject %in% NOFLY
 Y <- dvs$Alpha[keep]
 X <- X[keep,]
@@ -295,8 +301,8 @@ And now, let's visualize the historgram of the dependent variable we are trying 
 
 ```{r}
 dependent <- as_tibble(data.frame(alpha=Y))
-d3 <- pal_d3()
-kol = d3(7)
+#d3 <- pal_d3()
+#kol = d3(7)
 
 ggplot(dependent, aes(x=alpha, fill=cut(alpha, 7))) +
   geom_histogram(bins=8, col="white", alpha=0.5) +
@@ -384,6 +390,26 @@ ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha, col=Condition)) +
   ylab(expression(paste("Rate of Forgetting ", alpha))) +
   theme(axis.text.x = element_text(angle=45, hjust=1, size = 8)) +
   theme(legend.position="bottom")
+```
+
+A more canonical Predicted vs. Observed scatterplot:
+
+```{r, fig.width=6, fig.height=7}
+wcomparison <- comparison %>%
+  pivot_wider(id_cols = c("Subject"), names_from=c("Condition"), values_from=c("Alpha"))
+
+p <- ggplot(wcomparison, aes(x=Predicted, y=Observed, col=Observed)) +
+  geom_point(size=4, alpha=0.6) +
+  scale_color_viridis(option="plasma") +
+  theme_pander() +
+  theme(legend.position = "bottom",
+        legend.title  = element_blank()) +
+  coord_fixed() +
+  ggtitle("Predicted vs. Observed Rate of Forgetting")
+  
+ggMarginal(p, 
+           fill="blue", alpha=0.5,
+           type="hist", bins=13, col="white")
 
 ```
 
@@ -399,4 +425,15 @@ connectome <- order %>%
 
 write_csv(connectome, file="alpha3.csv")
 save(fit, fit.cv, X, Y, order, I, G, file="alpha3.RData")
+
+```
+
+Visualize the table of connections
+
+```{r}
+connectome %>%
+  xtable() %>%
+  kable(digits = 3) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
 ```
