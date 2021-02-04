@@ -390,12 +390,6 @@ ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha, col=Condition)) +
 ### Plotting Connectome
 
 ```{r}
-betas <- fit$beta[, which(fit$lambda==fit.cv$lambda.min)]
-conn_betas <- as_tibble(data.frame(index=I$index, Beta=betas))
-connectome <- order %>%
-   filter(index %in% I$index) %>%
-   inner_join(conn_betas) %>%
-   filter(Beta != 0)
 
 write_csv(connectome, file="alpha3.csv")
 save(fit, fit.cv, X, Y, order, I, G, file="alpha3.RData")
