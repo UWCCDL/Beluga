@@ -12,15 +12,9 @@ library(ggplot2)
 library(ggthemes)
 library(ppcor)
 library(reshape2)
-#library(gglasso)
+library(gglasso)
 library(glmnet)
-library(ggsci)
 library(viridis)
-library(ggExtra)
-library(kableExtra)
-library(xtable)
-#library(data.table)
-
 ```
 
 # Test Functional Connectivity Pipeline
@@ -32,7 +26,7 @@ This is a test of the FC pipeline.
 First, let's load the Power 2011 region database. This will be used as an "atlas" throughout, to guide the development of the regions.
 
 ```{r}
-power2011 <- read_csv("../rsfmri/bin/power_2011.csv", 
+power2011 <- read_csv("bin/power_2011.csv", 
                       col_types = cols(ROI=col_double(),
                                        X = col_double(),
                                        Y = col_double(),
@@ -192,16 +186,13 @@ nets %<>% as.vector
 netnames <- outer(power2011$Network, power2011$Network, vconnection_name2)
 netnames %<>% as.vector
 
-n <- length(grep("sub-*", dir("../rsfmri/")))
+n <- length(grep("sub-*", dir()))
 X <- matrix(data = rep(0, length(cols)*n), nrow =  n)
 
 j <- 1
 
-R <- NULL
-PR <- NULL
-
-for (sub in dir("../rsfmri/")[grep("sub-*", dir("../rsfmri/"))]) {
-  M <- read.table(paste("../rsfmri", sub, "PR.txt", sep="/"))
+for (sub in dir()[grep("sub-*", dir())]) {
+  M <- read.table(paste(sub, "PR.txt", sep="/"))
   v <- as_vector(M)  # v spreads M column-wise. M is symmetrical, so it should not matter, but better not risk it
   #print(c(length(v), mean(v)))
   X[j,] <- v
@@ -209,46 +200,32 @@ for (sub in dir("../rsfmri/")[grep("sub-*", dir("../rsfmri/"))]) {
     print(paste("NA detected in sub", sub))
     NOFLY %<>% c(sub)  # Addes sub to NOFLY list
   }
-  
   j <- j + 1
 }
 
-# Create python-compatible data
-#
-# for (sub in dir()[grep("sub-*", dir())]) {
-#   R1 <- read.table(paste(sub, "R.txt", sep="/"))
-#   R2 <- read.table(paste(sub, "PR.txt", sep="/"))
-#   write.table(R1, paste(sub, "R_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
-#   write.table(R2, paste(sub, "PR_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
-# }
-
 ```
-
-## Define the Networks
 
 Now, we can restrict the analysis only to a limited set of networks (and their cross-network connections) by modifying the `NOI` (Networks of Interest) variable. The variable will be used to create a second list, `COI` (Connections of interest), which will contain the possible list of network-to-network connections 
 
 ```{r}
 NOI <- c(
-   #"Uncertain",
+  # "Uncertain",
   # "Sensory/somatomotor Hand",
   # "Sensory/somatomotor Mouth",
-   "Cingulo-opercular Task Control",
+  # "Cingulo-opercular Task Control",
   # "Auditory",
-   "Default mode",
-   "Memory retrieval?",
-   "Ventral attention",
+  #"Default mode",
+  "Memory retrieval?",
+  # "Ventral attention",
   # "Visual",
-   "Fronto-parietal Task Control",
-  #"Salience",
-  "Subcortical",
+  "Fronto-parietal Task Control"
+  #"Salience"
+  # "Subcortical",
   #"Cerebellar",
-   "Dorsal attention"
+  #"Dorsal attention"
 )
 
-COI <- outer(NOI, 
-             NOI, 
-             function(x, y) {paste(x, y, sep="-")}) %>% as.vector()
+COI <- outer(NOI, NOI, function(x, y) {paste(x, y, sep="-")}) %>% as.vector()
 ```
 
 
@@ -257,9 +234,7 @@ Now, we need to remove some columns from the hyper-large X matrix, and define pr
 ```{r}
 # Here we simplify create a tibble which the X columns, and create a censor column to decide which ones to keep
 # If ROI1 = i and ROI2 = j, we keep column <i,j> IFF i < j.  This should keep the lower triangle.
-censor <- outer(power2011$ROI, 
-                power2011$ROI, 
-                function(x, y) {x < y}) %>% as.vector()
+censor <- outer(power2011$ROI, power2011$ROI, function(x, y) {x < y}) %>% as.vector()
 
 order <- tibble(index = 1:length(nets), 
                 network = nets, 
@@ -278,6 +253,10 @@ G <- order %>%
   filter(censor == TRUE) %>%
   filter(network_names %in% COI) %>%
   dplyr::select(network) 
+```  
+
+
+```{r}
 # G is the real grouping factor for Lasso!
 
 # The real X:
@@ -291,72 +270,113 @@ Now we need to load the dependent variable. In this case, it is the rate of forg
 Note that we could not measure $alpha$ for all participants, so we have to keep track of which rows in the $X$ regressor matrix we want to exclude from our Lasso analysis.
 
 ```{r}
-dvs <- read.table("../rsfmri/participants.tsv", sep="\t", header=T)
-keep <- !is.na(dvs$Alpha)  & !dvs$Subject %in% NOFLY
-Y <- dvs$Alpha[keep]
+dvs <- read.table("participants.tsv", sep="\t", header=T)
+keep <- !is.na(dvs$SymmetrySpan)  & !dvs$Subject %in% NOFLY
+Y <- dvs$SymmetrySpan[keep]
 X <- X[keep,]
-```
-
-And now, let's visualize the historgram of the dependent variable we are trying to predict:
-
-```{r}
-dependent <- as_tibble(data.frame(alpha=Y))
-#d3 <- pal_d3()
-#kol = d3(7)
-
-ggplot(dependent, aes(x=alpha, fill=cut(alpha, 7))) +
-  geom_histogram(bins=8, col="white", alpha=0.5) +
-  scale_fill_viridis(option = "plasma", discrete=T) +
-  geom_vline(xintercept = mean(dependent$alpha)) +
-  xlab(expression(paste("Rate of Forgetting ", alpha)))+
-  ylab("Number of Participants") +
-  ggtitle("Distribution of Rates of Forgetting") +
-  theme_pander() +
-  theme(legend.position = "none")
-
 ```
 
 # Lasso part
 
+With all the pieces in place, we can now do the Group Lasso:
 
-## Defining the model
+```{r}
+fit <- gglasso(y = Y,
+               x = X,
+               group = as.numeric(factor(G$network)),
+               loss = 'ls'
+               #lambda = exp(seq(-13, -6.5, 0.25)))
+               #nlambda = 50,
+               #lambda.factor = 0.05
+               )
+
+fit.cv <- cv.gglasso(y = Y,
+                     x = X,
+                     group = as.numeric(factor(G$network)),
+                     pred.loss="L1",
+                     nfolds=10
+                     #lambda=exp(seq(-13, -6.5, 0.25)))
+                     #nlambda = 50,
+                     #lambda.factor = 0.05
+                     )
+plot(fit.cv)
+plot(fit, group=T, col=inferno(length(unique(G$network))))
+
+network_names_mapping <- order %>%
+  group_by(network) %>%
+  summarise(network=Mode(network), name=Mode(network_names))
+
+uG <- unique(G$network)
+Gnames <- sapply(uG, function(x)
+{
+  network_names_mapping$name[network_names_mapping$network == x]
+}
+)
+legend(x="topright", legend=Gnames, col=inferno(length(Gnames)), lty=1, lwd=2)
+```
+
+## Predicted vs. Observed
+
+```{r}
+prediction <- predict(object=fit, 
+                      newx=X, 
+                      s=fit.cv$lambda.min, 
+                      type="link")
+
+observed <-tibble(Subject = dvs$Subject[keep], 
+                  Alpha=Y, 
+                  Condition="Observed")
+
+predicted <- tibble(Subject = dvs$Subject[keep], 
+                    Alpha = prediction, 
+                    Condition="Predicted")
+
+comparison <- as_tibble(rbind(observed, predicted))
+
+ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha), col=Condition) +
+  geom_point(aes(col=Condition)) +
+  geom_line(alpha=0.5, lty=0.2) +
+  xlab("Subject")+
+  annotate("text", x=20, y=0.20,
+           label=paste("r =", round(cor(Y, prediction), 5))) +
+  theme_pander() +
+  ylab("Rate of Forgetting (Alpha)") +
+  theme(axis.text.x = element_text(angle=90, hjust=1, size = 8))
+
+```
+
+
+## Lasso
 
 ```{r}
 fit <- glmnet(y = Y,
-              x = X,
+               x = X,
               alpha=1,
-              standardize = T
-)
+               )
 
 fit.cv <- cv.glmnet(y = Y,
-                    x = X,
+                     x = X,
                     alpha=1,
                     standardize=T,
-                    nfolds=length(Y)
-)
-
+                     nfolds=20
+                     #lambda=exp(seq(-13, -6.5, 0.25)))
+                     #nlambda = 50,
+                     #lambda.factor = 0.05
+                     )
 plot(fit.cv)
-plot(fit, sub="Beta Values for Connectivity")
 
-L1norm <- sum(abs(fit$beta[,which(fit$lambda==fit.cv$lambda.min)]))
-abline(v=L1norm, lwd=2, lty=2)
-```
+plot(fit)
+network_names_mapping <- order %>%
+  group_by(network) %>%
+  summarise(network=Mode(network), name=Mode(network_names))
 
-And now, plot prettier version
-
-```{r}
-lasso_df <- as_tibble(data.frame(lambda=fit.cv$lambda, error=fit.cv$cvm, sd=fit.cv$cvsd))
-
-ggplot(lasso_df, aes(x=lambda, y=error)) +
-  geom_line(aes(col=error), lwd=2) +
-  scale_color_viridis(option = "plasma") +
-  geom_ribbon(aes(ymin=error -sd, ymax=error + sd), alpha=0.2,fill="blue") +
-  xlab(expression(lambda)) +
-  ylab("Cross-Validation Error") +
-  ggtitle(expression(paste(bold("Cross Validation Error Across "), lambda))) +
-  geom_vline(xintercept = lasso_df$lambda[lasso_df$error==min(lasso_df$error)]) +
-  theme_pander() +
-  theme(legend.position="right")
+uG <- unique(G$network)
+Gnames <- sapply(uG, function(x)
+{
+  network_names_mapping$name[network_names_mapping$network == x]
+}
+)
+legend(x="topright", legend=Gnames, col=inferno(length(Gnames)), lty=1, lwd=2)
 ```
 
 ### Predicted vs. Observed
@@ -377,73 +397,14 @@ predicted <- tibble(Subject = dvs$Subject[keep],
 
 comparison <- as_tibble(rbind(observed, predicted))
 
-ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha, col=Condition)) +
-  geom_point(aes(col=Condition), size=4, alpha=0.8) +
+ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha), col=Condition) +
+  geom_point(aes(col=Condition)) +
   geom_line(alpha=0.5, lty=0.2) +
-  scale_color_d3() +
-  xlab("Participant")+
-  ggtitle("Predicted vs. Observed Rates of Forgetting") +
-  annotate("text", x=20, y=0.35,
-           label=paste("r(33) =", round(cor(Y, prediction), 3))) +
+  xlab("Subject")+
+  annotate("text", x=20, y=0.20,
+           label=paste("r =", round(cor(Y, prediction), 5))) +
   theme_pander() +
-  #ylab(expression("Symmetry Span")) +
-  ylab(expression(paste("Rate of Forgetting ", alpha))) +
-  theme(axis.text.x = element_text(angle=45, hjust=1, size = 8)) +
-  theme(legend.position="bottom")
-```
-
-A more canonical Predicted vs. Observed scatterplot:
-
-```{r, fig.width=5, fig.height=5}
-wcomparison <- comparison %>%
-  pivot_wider(id_cols = c("Subject"), names_from=c("Condition"), values_from=c("Alpha"))
-
-p <- ggplot(wcomparison, aes(y=Predicted, x=Observed, col=(Predicted-Observed)^2)) +
-  geom_abline(intercept = 0, slope = 1, 
-              col="red",
-              linetype="dashed") +
-  geom_point(size=4, alpha=0.6) +
-  scale_color_viridis("Error", option="plasma", end=0.8) +
-  theme_pander() +
-#  geom_smooth(method="lm") +
-
-  theme(legend.position = "right") +
-#        legend.  = element_text()) +
-#  guides(col=guide_legend("Error")) +
-  coord_fixed(xlim=c(0.25, 0.4), ylim=c(0.25, 0.4)) +
-  xlab("Observed Rate of Forgetting") +
-  ylab("Predicted Rate of Forgetting") +
-  ggtitle("Predicted vs. Observed\nRates of Forgetting")
-  
-ggMarginal(p, 
-           fill="blue", alpha=0.5,
-           type="density", #bins=13, 
-           col="blue",
-           margins = "x")
-
-```
-
-### Plotting Connectome
-
-```{r}
-betas <- fit$beta[, which(fit$lambda==fit.cv$lambda.min)]
-conn_betas <- as_tibble(data.frame(index=I$index, Beta=betas))
-connectome <- order %>%
-   filter(index %in% I$index) %>%
-   inner_join(conn_betas) %>%
-   filter(Beta != 0)
-
-write_csv(connectome, file="alpha3.csv")
-save(fit, fit.cv, X, Y, order, I, G, file="alpha3.RData")
-
-```
-
-Finally, we can visualize the table of connections
-
-```{r}
-connectome %>%
-  xtable() %>%
-  kable(digits = 5) %>%
-  kable_styling(bootstrap_options = c("striped", "hover"))
+  ylab("Rate of Forgetting (Alpha)") +
+  theme(axis.text.x = element_text(angle=90, hjust=1, size = 8))
 
 ```
