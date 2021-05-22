@@ -1,0 +1,26 @@
+index,network,network_names,connection,censor,censor2,Beta
+34707,-1-5,Uncertain-Default mode,123-132,TRUE,TRUE,0.015684527350325266
+7681,1-1,Sensory/somatomotor Hand-Sensory/somatomotor Hand,25-30,TRUE,TRUE,-0.013795811796618878
+9268,1-1,Sensory/somatomotor Hand-Sensory/somatomotor Hand,28-36,TRUE,TRUE,-0.005850176814139774
+10335,1-1,Sensory/somatomotor Hand-Sensory/somatomotor Hand,39-40,TRUE,TRUE,0.006386231839190145
+67873,1-12,Sensory/somatomotor Hand-Dorsal attention,25-258,TRUE,TRUE,0.007564894561440311
+35653,1-6,Sensory/somatomotor Hand-Memory retrieval?,13-136,TRUE,TRUE,0.02190267320491455
+59360,10-10,Subcortical-Subcortical,224-225,TRUE,TRUE,0.0017588271477479434
+59622,10-10,Subcortical-Subcortical,222-226,TRUE,TRUE,0.005058854631358906
+60683,10-10,Subcortical-Subcortical,227-230,TRUE,TRUE,-0.024422699740847608
+60950,10-10,Subcortical-Subcortical,230-231,TRUE,TRUE,-0.025399105924870897
+11925,2-2,Sensory/somatomotor Mouth-Sensory/somatomotor Mouth,45-46,TRUE,TRUE,5.498090054983933e-4
+46245,2-8,Sensory/somatomotor Mouth-Fronto-parietal Task Control,45-176,TRUE,TRUE,0.010164878362161196
+15363,3-3,Cingulo-opercular Task Control-Cingulo-opercular Task Control,51-59,TRUE,TRUE,0.023500397320401396
+19072,4-4,Auditory-Auditory,64-73,TRUE,TRUE,-0.02166282630887499
+62951,5-11,Default mode-Ventral attention,119-239,TRUE,TRUE,0.029406906832440415
+64806,5-13,Default mode-Cerebellar,126-246,TRUE,TRUE,0.023186981754143042
+28883,5-5,Default mode-Default mode,107-110,TRUE,TRUE,0.060395255361463514
+29405,5-5,Default mode-Default mode,101-112,TRUE,TRUE,-5.641841398652821e-4
+30209,5-5,Default mode-Default mode,113-115,TRUE,TRUE,-0.01552775007519288
+33920,5-5,Default mode-Default mode,128-129,TRUE,TRUE,0.01590672851681145
+34438,5-5,Default mode-Default mode,118-131,TRUE,TRUE,-0.023351331415788164
+35734,5-6,Default mode-Memory retrieval?,94-136,TRUE,TRUE,-0.007219617697098771
+40009,7-7,Visual-Visual,145-152,TRUE,TRUE,0.02299306938007514
+45569,7-7,Visual-Visual,161-173,TRUE,TRUE,-0.028744808105954638
+58004,8-9,Fronto-parietal Task Control-Salience,188-220,TRUE,TRUE,0.024042053676362172

@@ -1,0 +1,668 @@
+---
+title: "Test FC Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(ggthemes)
+library(ppcor)
+library(reshape2)
+#library(gglasso)
+library(glmnet)
+library(ggsci)
+library(viridis)
+library(ggExtra)
+library(kableExtra)
+library(xtable)
+#library(data.table)
+
+```
+
+# Test Functional Connectivity Pipeline
+
+This is a test of the FC pipeline.
+
+## Load and transform the data for every subject
+
+First, let's load the Power 2011 region database. This will be used as an "atlas" throughout, to guide the development of the regions.
+
+```{r}
+power2011 <- read_csv("../rsfmri/bin/power_2011.csv", 
+                      col_types = cols(ROI=col_double(),
+                                       X = col_double(),
+                                       Y = col_double(),
+                                       Z = col_double(),
+                                       Network = col_double(),
+                                       Color = col_character(),
+                                       NetworkName = col_character())) %>%
+  dplyr::select(ROI, X, Y, Z, Network, Color, NetworkName)
+```
+
+
+Then, let's create the functional connectivity matrix for every single subject in the dataset. This step can be skipped by setting the `CREATE_FC` variable to `F`. 
+
+```{r}
+CREATE_FC = F
+
+if (CREATE_FC) {
+  for (sub in dir()[grep("sub-*", dir())]) {
+    roidata <- NULL
+    for (roi in power2011$ROI) {
+      network <- power2011 %>%
+        filter(ROI == roi) %>%
+        dplyr::select(Network) %>%
+        as.numeric()
+      
+      network_name <- power2011 %>%
+        filter(ROI == roi) %>%
+        dplyr::select(NetworkName) %>%
+        as.character()
+      
+      file_name <- paste("region_", 
+                         sprintf("%03d", roi),  
+                         "_network_", 
+                         sprintf("%02d", max(0, network)), 
+                         ".txt",
+                         sep="")
+      #mat <- t(read.table(paste(sub, "func", file_name, sep="/")))
+      #pc1 <- prcomp(mat)  # PCA
+      #pc1 <- pc1$x[,1]    # first PC
+      mat <- colMeans(read.table(paste(sub, "func", file_name, sep="/")))
+      pc1 <- mat
+      table <- tibble(subject = sub,
+                      scan = 1:209,
+                      timeseries = pc1,
+                      roi = roi,
+                      network = network,
+                      network_name = network_name)
+      if (is.null(roidata)) {
+        roidata <- table
+      } else {
+        roidata %<>% bind_rows(table)
+      }
+    }
+    
+    # Pivot long data format into wide data 
+    wroidata <- roidata %>% pivot_wider(id_cols = scan, 
+                                        names_from = roi, 
+                                        values_from = timeseries)
+    X  <- as.matrix(wroidata[,2:265])/1000 
+    PR <- pcor(X)$estimate
+    R  <- cor(X)
+    
+    # Generate matrices:
+    
+    # The partial correlation matrix
+    long_pr <- melt(PR)
+    #pdf(paste(sub, "fc_pcorr.pdf", sep="/"))
+    ggplot(long_pr, aes(x=Var1, y=Var2)) +
+      geom_raster(aes(fill=value)) +
+      scale_fill_gradient2(limits=c(-1,1), 
+                           low = "blue", 
+                           high = "red", 
+                           mid = "white") +
+      theme_pander() +
+      ggtitle(paste(sub, ": Functional Connectivity (Partial Correlations)", sep="")) +
+      xlab("ROIs") +
+      ylab("ROIs") 
+    #dev.off()
+    ggsave(paste(sub, "fc_pcorr.pdf", sep="/"))
+    write.table(PR, col.names = T, 
+                row.names = T, 
+                file = paste(sub, "PR.txt", sep="/"))
+    
+    # The standard correlation matrix
+    long_r <- melt(R)
+    #pdf(paste(sub, "fc_corr.pdf", sep="/"))
+    ggplot(long_r, aes(x=Var1, y=Var2)) +
+      geom_raster(aes(fill=value)) +
+      scale_fill_gradient2(limits=c(-1,1), low = "blue", high = "red", mid = "white") +
+      theme_pander() +
+      ggtitle(paste(sub, ": Functional Connectivity, Standard Correlations)", sep="")) +
+      xlab("ROIs") +
+      ylab("ROIs") 
+    #dev.off()
+    ggsave(paste(sub, "fc_corr.pdf", sep="/"))
+    write.table(R, col.names = T, 
+                row.names = T, 
+                file = paste(sub, "R.txt", sep="/"))
+  }
+}
+```
+
+## Load the group-level data
+
+We now need to load the group level data. In essence, to corresponds to create a matrix _X_ in which every individual is a row and every columns is a different ROI-to-ROI connection.
+
+```{r}
+NOFLY <- c()
+cols <- outer(power2011$ROI, power2011$ROI, function(x, y) {paste(x, y, sep="-")})
+cols %<>% as.vector
+
+connection <- function(x, y) {
+  paste(min(x, y), max(x, y), sep="-")
+}
+
+vconnection <- Vectorize(connection)
+
+Mode <- function(x, na.rm=F) {
+  if (na.rm) {
+    x = x[!is.na(x)]
+  }
+  ux <- unique(x)
+  return(ux[which.max(tabulate(match(x, ux)))])
+}
+
+reduced_power2011 <- power2011 %>% 
+  dplyr::select(Network, NetworkName) %>%
+  group_by(Network) %>%
+  summarize(Network = mean(Network), NetworkName = Mode(NetworkName))
+
+connection_name <- function(x, y) {
+  first <- min(x, y)
+  second <- max(x, y)
+  paste(reduced_power2011 %>% filter(Network == first) %>% dplyr::select(NetworkName) ,
+        reduced_power2011 %>% filter(Network == second) %>% dplyr::select(NetworkName),
+        sep="-")
+  
+}
+
+vconnection_name <- Vectorize(connection_name)
+
+
+connection_name2 <- function(x, y) {
+  first <- min(x, y)
+  second <- max(x, y)
+  paste(reduced_power2011$NetworkName[reduced_power2011$Network == first],
+        reduced_power2011$NetworkName[reduced_power2011$Network == second],
+        sep="-")
+  
+}
+
+vconnection_name2 <- Vectorize(connection_name2)
+
+
+nets <- outer(power2011$Network, power2011$Network, vconnection)
+nets %<>% as.vector
+netnames <- outer(power2011$Network, power2011$Network, vconnection_name2)
+netnames %<>% as.vector
+
+n <- length(grep("sub-*", dir("../rsfmri/")))
+C <- matrix(data = rep(0, length(cols)*n), nrow =  n)
+
+j <- 1
+
+R <- NULL
+PR <- NULL
+
+for (sub in dir("../rsfmri/")[grep("sub-*", dir("../rsfmri/"))]) {
+  M <- read.table(paste("../rsfmri", sub, "PR.txt", sep="/"))
+  v <- as_vector(M)  # v spreads M column-wise. M is symmetrical, so it should not matter, but better not risk it
+  #print(c(length(v), mean(v)))
+  C[j,] <- v
+  if (length(v[is.na(v)]) > 0) {
+    print(paste("NA detected in sub", sub))
+    NOFLY %<>% c(sub)  # Addes sub to NOFLY list
+  }
+  
+  j <- j + 1
+}
+
+# Create python-compatible data
+#
+# for (sub in dir()[grep("sub-*", dir())]) {
+#   R1 <- read.table(paste(sub, "R.txt", sep="/"))
+#   R2 <- read.table(paste(sub, "PR.txt", sep="/"))
+#   write.table(R1, paste(sub, "R_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
+#   write.table(R2, paste(sub, "PR_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
+# }
+
+```
+
+## Define the Networks
+
+Now, we can restrict the analysis only to a limited set of networks (and their cross-network connections) by modifying the `NOI` (Networks of Interest) variable. The variable will be used to create a second list, `COI` (Connections of interest), which will contain the possible list of network-to-network connections 
+
+```{r}
+NOI <- c(
+  "Uncertain",
+"Sensory/somatomotor Hand",
+"Sensory/somatomotor Mouth",
+  "Cingulo-opercular Task Control",
+  "Auditory",
+   "Default mode",
+  "Memory retrieval?",
+  "Ventral attention",
+  "Visual",
+  "Fronto-parietal Task Control",
+  "Salience",
+"Subcortical",
+ "Cerebellar",
+  "Dorsal attention"
+)
+
+COI <- outer(NOI, 
+             NOI, 
+             function(x, y) {paste(x, y, sep="-")}) %>% as.vector()
+```
+
+
+Now, we need to remove some columns from the hyper-large X matrix, and define proper groupings for Lasso.
+
+```{r}
+# Here we simplify create a tibble which the X columns, and create a censor column to decide which ones to keep
+# If ROI1 = i and ROI2 = j, we keep column <i,j> IFF i < j.  This should keep the lower triangle.
+censor <- outer(power2011$ROI, 
+                power2011$ROI, 
+                function(x, y) {x < y}) %>% as.vector()
+
+censor2 <- colMeans(C) %>% abs() > 0.1
+
+order <- tibble(index = 1:length(nets), 
+                network = nets, 
+                network_names = netnames,
+                connection = cols, 
+                censor=censor,
+                censor2 = censor2)
+order %<>% arrange(network)
+
+
+I <- order %>%
+  filter(censor == TRUE) %>%
+  filter(censor2 == TRUE) %>%
+  filter(network_names %in% COI) %>%
+  dplyr::select(index) 
+
+G <- order %>%
+  filter(censor == TRUE) %>%
+  filter(network_names %in% COI) %>%
+  dplyr::select(network) 
+# G is the real grouping factor for Lasso!
+
+# The real X:
+X <- C[,as_vector(I)]
+```
+
+## Load the dependent variable $Y$
+
+Now we need to load the dependent variable. In this case, it is the rate of forgetting $alpha$, which is stored as part of the participants' meta-data in `participats.tsv`. 
+
+Note that we could not measure $alpha$ for all participants, so we have to keep track of which rows in the $X$ regressor matrix we want to exclude from our Lasso analysis.
+
+```{r}
+dvs <- read.table("../rsfmri/participants.tsv", sep="\t", header=T)
+keep <- !is.na(dvs$Alpha)  & !dvs$Subject %in% NOFLY
+Y <- dvs$Alpha[keep]
+X <- X[keep,]
+```
+
+The regressors $X$ is certainly multi-collinear. To gather a sense of how much it is so, we can plot the distribution of correlations among regressors:
+
+```{r}
+corX <- cor(X)
+distCor <- as_vector(corX[lower.tri(corX, diag = F)])
+distTibble <- as_tibble(data.frame(R=distCor))
+
+ggplot(distTibble, aes(x=R)) +
+  geom_histogram(col="white") +
+  theme_pander() +
+  ylab("Number of Correlations") +
+  xlab("Correlation Value") +
+  ggtitle("Distribution of Correlation Values Between Regressors")
+
+```
+
+And now, let's visualize the historgram of the dependent variable we are trying to predict:
+
+```{r}
+dependent <- as_tibble(data.frame(alpha=Y))
+#d3 <- pal_d3()
+#kol = d3(7)
+
+ggplot(dependent, aes(x=alpha, fill=cut(alpha, 7))) +
+  geom_histogram(bins=8, col="white", alpha=0.5) +
+  scale_fill_viridis(option = "plasma", discrete=T) +
+  geom_vline(xintercept = mean(dependent$alpha)) +
+  xlab(expression(paste("Rate of Forgetting ", alpha)))+
+  ylab("Number of Participants") +
+  ggtitle("Distribution of Rates of Forgetting") +
+  theme_pander() +
+  theme(legend.position = "none")
+
+```
+
+# Lasso part
+
+
+## Defining the model
+
+```{r}
+# fit <- ncvreg
+fit <- glmnet(y = Y,
+              x = X,
+               alpha=1,
+              #lambda.min = 0.5,
+             #lam= 0.04978707,#log(length(Y)),
+              standardize = T
+)
+
+#fit.cv <- cv.ncvreg(y = Y,
+
+fit.cv <- cv.glmnet(y = Y,
+                    x = X,
+                     alpha=1,
+                   # lam=exp(seq(-3, -10, -0.1)),
+                   #penalty="SCAD",
+                    standardize=T,
+                    nfolds=length(Y)
+)
+
+plot(fit.cv)
+plot(fit, sub="Beta Values for Connectivity")
+
+L1norm <- sum(abs(fit$beta[,which(fit$lambda==fit.cv$lambda.min)]))
+abline(v=L1norm, lwd=2, lty=2)
+```
+
+And now, plot prettier version
+
+```{r, fig.width=6, fig.height=4}
+lasso_df <- as_tibble(data.frame(lambda=fit.cv$lambda, 
+                                 error=fit.cv$cvm, 
+                                 sd=fit.cv$cvsd))
+
+ggplot(lasso_df, aes(x=lambda, y=error)) +
+  geom_line(aes(col=error), lwd=2) +
+  scale_color_viridis("Error", option = "plasma") +
+  geom_ribbon(aes(ymin=error -sd, ymax=error + sd), alpha=0.2,fill="blue") +
+  xlab(expression(lambda)) +
+  ylab("Cross-Validation Error") +
+  ggtitle(expression(paste(bold("Cross Validation Error Across "), lambda))) +
+  geom_vline(xintercept = lasso_df$lambda[lasso_df$error==min(lasso_df$error)]) +
+  theme_pander() +
+  theme(legend.position="right")
+```
+
+### Predicted vs. Observed
+
+```{r}
+prediction <- predict(object=fit, 
+                      newx=X,
+                      #X=X,
+                      fit.cv$lambda.min, 
+                      type="link")
+
+observed <-tibble(Subject = dvs$Subject[keep], 
+                  Alpha=Y, 
+                  Condition="Observed")
+
+predicted <- tibble(Subject = dvs$Subject[keep], 
+                    Alpha = prediction, 
+                    Condition="Predicted")
+
+comparison <- as_tibble(rbind(observed, predicted))
+
+ggplot(comparison, aes(x=reorder(Subject, Alpha), y=Alpha, col=Condition)) +
+  geom_point(aes(col=Condition), size=4, alpha=0.8) +
+  geom_line(alpha=0.5, lty=0.2) +
+  scale_color_d3() +
+  xlab("Participant")+
+  ggtitle("Predicted vs. Observed Rates of Forgetting") +
+  annotate("text", x=20, y=0.35,
+           label=paste("r(33) =", round(cor(Y, prediction), 3))) +
+  theme_pander() +
+  #ylab(expression("Symmetry Span")) +
+  ylab(expression(paste("Rate of Forgetting ", alpha))) +
+  theme(axis.text.x = element_text(angle=45, hjust=1, size = 8)) +
+  theme(legend.position="bottom")
+```
+
+A more canonical Predicted vs. Observed scatterplot:
+
+```{r, fig.width=6, fig.height=6}
+wcomparison <- comparison %>%
+  pivot_wider(id_cols = c("Subject"), names_from=c("Condition"), values_from=c("Alpha"))
+
+p <- ggplot(wcomparison, aes(y=Predicted, x=Observed, 
+                             col=(100*(Predicted-Observed)/Observed))) +
+  geom_abline(intercept = 0, slope = 1, 
+              col="red",
+              linetype="dashed") +
+  geom_point(size=4, alpha=0.6) +
+  scale_color_viridis("% Error", option="plasma", end=0.8) +
+  theme_pander() +
+#  geom_smooth(method="lm") +
+
+  theme(legend.position = "right") +
+#        legend.  = element_text()) +
+#  guides(col=guide_legend("Error")) +
+  coord_fixed(xlim=c(0.25, 0.4), ylim=c(0.25, 0.4)) +
+  annotate("text", x=0.3, y=0.35,
+           label=paste("r(33) =", 
+                       floor(100*cor(Y, prediction))/100)) +
+  xlab("Observed Rate of Forgetting") +
+  ylab("Predicted Rate of Forgetting") +
+  ggtitle("Predicted vs. Observed Rates of Forgetting")
+  
+ggMarginal(p, 
+           fill="blue", alpha=0.5,
+           type="density", #bins=13, 
+           col="blue",
+           margins = "x")
+
+```
+
+### Plotting Connectome
+
+```{r}
+betas <- fit$beta[, which(fit$lambda==fit.cv$lambda.min)]
+conn_betas <- as_tibble(data.frame(index=I$index, Beta=betas))
+connectome <- order %>%
+   filter(index %in% I$index) %>%
+   inner_join(conn_betas) %>%
+  dplyr::select(-censor2) %>%
+   filter(Beta != 0)
+
+write_csv(connectome, file="alpha4.csv")
+save(fit, fit.cv, X, Y, order, I, G, file="alpha4.RData")
+
+```
+
+Finally, we can visualize the table of connections
+
+```{r}
+connectome %>%
+  xtable() %>%
+  kable(digits = 5) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+And we can do some statistics.
+
+```{r}
+region_from <- function(s) {as.numeric(strsplit(s, "-")[[1]][1])}
+region_to <- function(s) {as.numeric(strsplit(s, "-")[[1]][2])}
+
+vregion_from <- Vectorize(region_from)
+vregion_to <- Vectorize(region_to)
+
+lROIs <- unique(c(vregion_from(connectome$connection),
+                  vregion_to(connectome$connection)))
+
+rois <- power2011[lROIs,]
+roi_stats <- rois %>%
+  group_by(NetworkName, Color) %>%
+  summarise(N=length(Color)/length(lROIs)) %>%
+  add_column(Source="Lasso")
+
+
+subsetPower <- filter(power2011,
+                      NetworkName %in% NOI)
+
+noi_stats <- subsetPower %>%
+  group_by(NetworkName, Color) %>%
+  summarise(N=length(Color)/dim(subsetPower)[1]) %>%
+  add_column(Source="Power")
+
+total_stats <- rbind(roi_stats, noi_stats)
+
+ggplot(total_stats, aes(x="", y=N, fill=NetworkName)) +
+  geom_bar(stat = "identity", col="grey", width=1) +
+  facet_grid(~Source, labeller = label_both) +
+  coord_polar("y", start=0) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 2L)) +
+  scale_fill_viridis(discrete = T) +
+  scale_color_jama() +
+  ylab("") +
+  xlab("") +
+  ggtitle("Effect of External Factors on Trajectories") +
+  geom_text_repel(aes(label=percent(N, .01)), col="white",
+            position=position_stack(vjust=1), size=3)+
+  theme_pander() +
+  theme(legend.position = "bottom")
+```
+
+There is no difference in the distribution of ROIs:
+
+```{r}
+chisq.test(roi_stats$N*length(lROIs), p=noi_stats$N)
+```
+
+And now, let's look at the sparsity
+
+```{r}
+
+net_from <- function(s) {as.character(strsplit(s, "-")[[1]][1])}
+net_to <- function(s) {as.character(strsplit(s, "-")[[1]][2])}
+
+vnet_from <- Vectorize(net_from)
+vnet_to <- Vectorize(net_to)
+
+connectivity <- function(s) {
+  if (net_from(s) == net_to(s)) {
+    "Within"
+  } else {
+    "Between"
+  }
+}
+
+vconnectivity <- Vectorize(connectivity)
+
+coi <- order %>%
+  filter(censor == TRUE) %>%
+  filter(network_names %in% COI) 
+
+coi$from <- vnet_from(coi$network_names)
+coi$to <- vnet_to(coi$network_names)
+coi$connection <- vconnectivity(coi$network_names)
+
+coi_stats <- coi %>% 
+  group_by(connection) %>% 
+  summarise(N=length(index), P=length(index)/dim(coi)[1]) %>%
+  add_column(Source = "Power et al. (2011)")
+  
+
+connectome$connection <- vconnectivity(connectome$network_names)
+connectome_stats <- connectome %>%
+  group_by(connection) %>% 
+  summarise(N=length(index), P=length(index)/dim(connectome)[1]) %>%
+  add_column(Source = "Lasso Analysis")
+  
+
+total_stats2 <- rbind(connectome_stats, coi_stats)
+
+ggplot(total_stats2, aes(x="", y=P, fill=connection)) +
+  geom_bar(stat = "identity", col="grey", width=1) +
+  facet_grid(~Source, labeller = label_both) +
+  coord_polar("y", start=0) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 2L)) +
+  scale_fill_jama() +
+  scale_color_jama() +
+  ylab("") +
+  xlab("") +
+  ggtitle("Effect of External Factors on Trajectories") +
+  geom_text_repel(aes(label=percent(P, .1)), col="white",
+            position=position_stack(vjust=1), size=3)+
+  theme_pander() +
+  theme(legend.position = "bottom")
+```
+
+The differnece in distribution is  
+
+```{r}
+chisq.test(connectome_stats$N, p=coi_stats$P)
+```
+
+# Testing the validity of the Lasso model
+
+To test the validity, we remove all the  connections with significant beta values, and check whether the results are still significant. 
+
+
+```{r}
+XX <- X[, conn_betas$Beta == 0]
+
+fit <- glmnet(y = Y,
+              x = XX,
+              alpha=1,
+              standardize = T
+)
+
+fit.cv <- cv.glmnet(y = Y,
+                    x = XX,
+                    alpha=1,
+                    standardize=T,
+                    nfolds=length(Y)
+)
+
+plot(fit.cv)
+plot(fit, sub="Beta Values for Connectivity")
+
+L1norm <- sum(abs(fit$beta[,which(fit$lambda==fit.cv$lambda.min)]))
+abline(v=L1norm, lwd=2, lty=2)
+```
+
+And now, plot prettier version
+
+```{r fig.width=6, fig.height=4}
+lasso_df <- as_tibble(data.frame(lambda=fit.cv$lambda, error=fit.cv$cvm, sd=fit.cv$cvsd))
+
+ggplot(lasso_df, aes(x=lambda, y=error)) +
+  geom_line(aes(col=error), lwd=2) +
+  scale_color_viridis("Error", option = "plasma") +
+  geom_ribbon(aes(ymin=error -sd, ymax=error + sd), alpha=0.2,fill="blue") +
+  xlab(expression(lambda)) +
+  ylab("Cross-Validation Error") +
+  ggtitle(expression(paste(bold("Cross Validation Error Across "), lambda, bold(" (After Removal)")))) +
+  geom_vline(xintercept = lasso_df$lambda[lasso_df$error==min(lasso_df$error)]) +
+  theme_pander() +
+  theme(legend.position="right")
+```
+
+## Variance Inflation Factor
+
+Then, we examine the VIF:
+
+```{r}
+
+dfX <- data.frame(cbind(Y, X[,betas != 0]))
+names(dfX) <- c("Y", paste("X", 1:25, sep=""))
+mod<-lm(Y~X1 + X2 +X3 + X4 +X5 +X6 + X7 + X8 +X9 + X10 + X11 + X12 +X13 + X14 +X15 +X16 + X17 + X18 +X19 + X20 + X21 + X22 +X23 + X24 +X25, data=dfX)
+vif(mod)
+
+vifs <- vif(mod)
+
+vifsT <- tibble(VIF=vifs)
+
+ggplot(vifsT, aes(x=VIF)) +
+  geom_histogram(col="white") +
+  theme_pander() +
+  xlab("VIF Value") +
+  ylab("Number of Predictors") +
+  ggtitle("Variance Inflation Factors")
+```

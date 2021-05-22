@@ -1,0 +1,25 @@
+# Functional Connectivity Correlates of Rates of Forgetting
+
+This repository contains the data, analysis, and results of the
+"Beluga" project, carried out by Yinan Xu, Chantel Prat, and Andrea Stocco at
+the University of Washington and [Florian Sense](https://fsense.github.io/) and [Hedderik van Rijn](http://www.van-rijn.org/) at the University of Groningen, The Netherlands.
+
+## Rationale
+
+In a series of papers, Sense and van Rijn demonstrated that the rate
+of forgetting in long-term memory is stable across time and materials
+within an individual---it is, thus, akin to what personality
+psychologists would call a _trait_, and to what computational
+neuroscientists and statisticians would call an _idiographic
+parameter_.
+
+It is likely that such idiographic characteristics reflect the
+underlying biology of an individual. If this is true, then the
+parameter should be reflected in some measures of recordable
+electropshyiological activity, such as fMRI, EEG, or PET recordings.
+
+## Resting State Neuroimaging
+
+For this project, we focused on _resting state_ fMRI, using data collected by Chantel Prat from 64 participants. A subset of these participants were also asked to perform van Rijn's adaptive learning task; their estimated rate of forgetting is then correlated with functional connectivity values between the 264 regions in the Power et al (2011) parcellation.
+
+The results are the following
