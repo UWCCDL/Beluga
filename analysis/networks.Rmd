@@ -1,0 +1,108 @@
+---
+title: "FIRESTORM Data Analysis"
+author: "Andrea Stocco"
+date: "May 29, 2019"
+output:
+  html_document:
+    code_folding: hide
+    theme: yeti
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  word_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(ggsci)
+library(ggthemes)
+```
+
+# Network Stuff
+
+## Load the data
+
+```{r}
+nets <- read_csv("network_stats.csv",
+                 col_types = cols(Subject = col_character(),
+                                  Cl = col_double(),
+                                  Cr = col_double(),
+                                  Ll = col_double(),
+                                  Lr = col_double()))
+
+```
+
+## Clustering 
+
+```{r}
+wnets <- nets %>%
+  select(Subject, Cl, Cr) %>%
+  rename(Left = Cl, Right = Cr) %>%
+  filter(Left > 0)
+
+lnets <- wnets %>%
+  pivot_longer(cols = c("Left", "Right"),
+               values_to = "Clustering",
+               names_to = "Hemisphere") %>%
+  filter(Clustering > 0)
+
+means <- lnets %>%
+  group_by(Hemisphere) %>%
+  summarize(Clustering = mean(Clustering))
+
+ttest <- t.test(Clustering ~ Hemisphere, paired=T, lnets)
+
+ggplot(lnets, aes(x=Hemisphere, y=Clustering, col=Hemisphere)) +
+  geom_point(position = position_jitter(width = 0.1, height=0),
+             alpha=0.4, size=0.65) +
+  stat_summary(fun.data = "mean_cl_boot", col="red", size=0.75) +
+  theme_pander() +
+  scale_color_jama() +
+  geom_text(data = means,
+            col="red", alpha=1,
+            aes(x = 1.5, y = 0.4),
+            label=paste("t(60) =", round(ttest$statistic, 2),
+                        "p = ", round(ttest$p.value, 5)
+            )) +
+  theme(legend.position = "NA")
+
+
+ggplot(lnets, aes(x=Hemisphere, y=Clustering, col=Hemisphere)) +
+  # geom_point(position = position_jitter(width = 0, height=0),
+  #            alpha=0.5) +
+  geom_line(aes(group = Subject), alpha=0.5, col="grey") +
+  stat_summary(fun.data = "mean_cl_boot", col="red") +
+  theme_pander() +
+  scale_color_jama() +
+  theme(legend.position = "NA") +
+  geom_text(data = means,
+            col="red", alpha=1,
+            aes(x = 1.5, y = 0.4),
+            label=paste("t(60) =", round(ttest$statistic, 2),
+                        "p = ", round(ttest$p.value, 5)
+            ))
+```
+
+## Correlations between hemispheres
+
+```{r}
+
+rtest <- cor.test(wnets$Right, wnets$Left)
+ggplot(wnets, aes(x=Left, y=Right)) +
+  geom_point(alpha=0.5, size=2) +
+  geom_smooth(method="lm") +
+  geom_text(data=means, x=0.5, y=0.42, col="red",
+            label=paste("r(62) =", round(rtest$estimate,
+                                         2),
+                        "p =", round(rtest$p.value, 3)))+
+
+  theme_pander()
+```
+
