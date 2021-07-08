@@ -1,6 +1,18 @@
 ---
-title: "Test FC Analysis"
-output: html_document
+title: "Beluga Project Analysis"
+output:
+  html_document:
+    code_folding: hide
+    theme: yeti
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  word_document:
+    toc: yes
+    toc_depth: '3'
 ---
 
 ```{r setup, include=FALSE}
@@ -19,13 +31,16 @@ library(viridis)
 library(ggExtra)
 library(kableExtra)
 library(xtable)
+library(ggrepel)
+library(scales)
+library(car)
 #library(data.table)
 
 ```
 
-# Test Functional Connectivity Pipeline
+# Beluga: Predicting Individual Rates of Forgetting from Resting-State Functional Connectivity
 
-This is a test of the FC pipeline.
+Here we 
 
 ## Load and transform the data for every subject
 
@@ -457,6 +472,10 @@ ggMarginal(p,
 
 ```
 
+## Cross-validated predictions
+
+
+
 ### Plotting Connectome
 
 ```{r}
@@ -466,7 +485,8 @@ connectome <- order %>%
    filter(index %in% I$index) %>%
    inner_join(conn_betas) %>%
   dplyr::select(-censor2) %>%
-   filter(Beta != 0)
+   filter(Beta != 0) %>%
+  arrange(index)
 
 write_csv(connectome, file="alpha4.csv")
 save(fit, fit.cv, X, Y, order, I, G, file="alpha4.RData")
@@ -560,24 +580,24 @@ coi <- order %>%
 
 coi$from <- vnet_from(coi$network_names)
 coi$to <- vnet_to(coi$network_names)
-coi$connection <- vconnectivity(coi$network_names)
+coi$connection_type <- vconnectivity(coi$network_names)
 
 coi_stats <- coi %>% 
-  group_by(connection) %>% 
+  group_by(connection_type) %>% 
   summarise(N=length(index), P=length(index)/dim(coi)[1]) %>%
   add_column(Source = "Power et al. (2011)")
   
 
-connectome$connection <- vconnectivity(connectome$network_names)
+connectome$connection_type <- vconnectivity(connectome$network_names)
 connectome_stats <- connectome %>%
-  group_by(connection) %>% 
+  group_by(connection_type) %>% 
   summarise(N=length(index), P=length(index)/dim(connectome)[1]) %>%
   add_column(Source = "Lasso Analysis")
   
 
 total_stats2 <- rbind(connectome_stats, coi_stats)
 
-ggplot(total_stats2, aes(x="", y=P, fill=connection)) +
+ggplot(total_stats2, aes(x="", y=P, fill=connection_type)) +
   geom_bar(stat = "identity", col="grey", width=1) +
   facet_grid(~Source, labeller = label_both) +
   coord_polar("y", start=0) +
@@ -603,66 +623,189 @@ chisq.test(connectome_stats$N, p=coi_stats$P)
 
 To test the validity, we remove all the  connections with significant beta values, and check whether the results are still significant. 
 
-
 ```{r}
 XX <- X[, conn_betas$Beta == 0]
 
-fit <- glmnet(y = Y,
-              x = XX,
-              alpha=1,
-              standardize = T
+fit_wo <- glmnet(y = Y,
+                 x = XX,
+                 alpha=1,
+                 lambda = fit$lambda,
+                 standardize = T
 )
 
-fit.cv <- cv.glmnet(y = Y,
-                    x = XX,
-                    alpha=1,
-                    standardize=T,
-                    nfolds=length(Y)
+fit_wo.cv <- cv.glmnet(y = Y,
+                       x = XX,
+                       alpha=1,
+                       lambda = fit$lambda,
+                       standardize=T,
+                       nfolds=length(Y)
 )
 
-plot(fit.cv)
-plot(fit, sub="Beta Values for Connectivity")
+#plot(fit.cv)
+plot(fit_wo, sub="Beta Values for Connectivity")
 
 L1norm <- sum(abs(fit$beta[,which(fit$lambda==fit.cv$lambda.min)]))
 abline(v=L1norm, lwd=2, lty=2)
 ```
 
-And now, plot prettier version
+And now, we can plot the $\lambda$-curve:
 
 ```{r fig.width=6, fig.height=4}
-lasso_df <- as_tibble(data.frame(lambda=fit.cv$lambda, error=fit.cv$cvm, sd=fit.cv$cvsd))
+lasso_df_wo <- tibble(lambda=fit_wo.cv$lambda, 
+                   error=fit_wo.cv$cvm, 
+                   sd=fit_wo.cv$cvsd)
 
-ggplot(lasso_df, aes(x=lambda, y=error)) +
+ggplot(lasso_df_wo, aes(x = lambda, y = error)) +
   geom_line(aes(col=error), lwd=2) +
   scale_color_viridis("Error", option = "plasma") +
-  geom_ribbon(aes(ymin=error -sd, ymax=error + sd), alpha=0.2,fill="blue") +
+  geom_ribbon(aes(ymin = error - sd, 
+                  ymax = error + sd), 
+              alpha = 0.2,
+              fill="blue") +
   xlab(expression(lambda)) +
   ylab("Cross-Validation Error") +
   ggtitle(expression(paste(bold("Cross Validation Error Across "), lambda, bold(" (After Removal)")))) +
-  geom_vline(xintercept = lasso_df$lambda[lasso_df$error==min(lasso_df$error)]) +
+  geom_vline(xintercept = lasso_df_wo$lambda[lasso_df_wo$error==min(lasso_df_wo$error)]) +
   theme_pander() +
   theme(legend.position="right")
 ```
 
+It is useful to plot the two $\lambda$-curves (with and without the 25 connections) in the same plot.
+
+```{r fig.width=5, fig.height=5}
+lasso_df$Model <- "Full Model"
+lasso_df_wo$Model <- "Without the Selected Connections"
+
+lasso_uber <- rbind(lasso_df, lasso_df_wo)
+
+ggplot(lasso_uber, aes(x = lambda, y = error, fill=Model)) +
+  scale_color_d3() +
+  scale_fill_d3()+
+  geom_ribbon(aes(ymin = error - sd, 
+                  ymax = error + sd), 
+              alpha = 0.5,
+              #fill="blue"
+              ) +
+  geom_line(aes(col=Model), lwd=2) +
+  xlab(expression(lambda)) +
+  ylab("Cross-Validation Error") +
+  ggtitle(expression(paste(bold("Cross Validation Error Across "), lambda))) +
+  geom_vline(xintercept = lasso_df$lambda[lasso_df$error==min(lasso_df$error)]) +
+  theme_pander() +
+  theme(legend.position="bottom")
+```
+
 ## Variance Inflation Factor
 
-Then, we examine the VIF:
+Then, we examine the Variance Inflation Factor (VIF). To calculate the VIF, we need to first create a linear model of the factor effects:
 
 ```{r}
-
 dfX <- data.frame(cbind(Y, X[,betas != 0]))
 names(dfX) <- c("Y", paste("X", 1:25, sep=""))
-mod<-lm(Y~X1 + X2 +X3 + X4 +X5 +X6 + X7 + X8 +X9 + X10 + X11 + X12 +X13 + X14 +X15 +X16 + X17 + X18 +X19 + X20 + X21 + X22 +X23 + X24 +X25, data=dfX)
+
+# There MUST be a better way to do this but, for the time being... 
+mod<-lm(Y ~ X1 + X2 +X3 + X4 + X5 
+        + X6 + X7 + X8 + X9 + X10 
+        + X11 + X12 + X13 + X14 + X15 
+        + X16 + X17 + X18 + X19 + X20 
+        + X21 + X22 + X23 + X24 + X25, 
+        data=dfX)
+```
+
+We can now calculate the VIF and turn the results into a tibble: 
+
+```{r}
 vif(mod)
-
 vifs <- vif(mod)
-
 vifsT <- tibble(VIF=vifs)
+```
 
+And, finally, we can plot an histogram of the distribution of VIF values.
+
+```{r}
 ggplot(vifsT, aes(x=VIF)) +
-  geom_histogram(col="white") +
+  geom_histogram(col="white", binwidth = 0.5, fill="blue", alpha=0.4) +
   theme_pander() +
   xlab("VIF Value") +
   ylab("Number of Predictors") +
-  ggtitle("Variance Inflation Factors")
+  ggtitle("Distribution of Variance Inflation Factors")
+```
+
+## Cross validated predictions
+
+```{r}
+dfX <- data.frame(cbind(Y, X[,betas != 0]))
+numP <- ncol(X[, betas != 0])  
+numO <- length(Y)
+names(dfX) <- c("Y", paste("X", 1:numP, sep=""))
+
+Yp <- rep(0, numO)  # Vector of zeros the size of Y 
+Xe <- matrix(rep(0, numP * numO), 
+             ncol = numP)  # Matrix of zeros the dimensions of X
+
+for (i in seq(1, length(Y))) {
+  subdfX <- dfX[-i,]
+  lmod<-lm(Y ~ . + 1, as.data.frame(subdfX))
+  
+  yp <- predict(object=lmod, 
+                newdata=dfX[i, 2:(numP + 1)])
+  Yp[i] <- yp
+  Xe[i,] <- lmod$coefficients[2:(numP + 1)]
+}
+```
+
+Now, let's do a real predicted vs. observed graph:
+
+```{r, fig.width=5, fig.height=5}
+wcomparison <- tibble(Observed = Y,
+                     Predicted = Yp)
+              
+p <- ggplot(wcomparison, aes(x=Predicted, y=Observed, 
+                             col=(abs(100*(Predicted-Observed)/Observed)))) +
+  geom_point(size=4, alpha=0.6) +
+  geom_abline(intercept = 0, slope = 1, 
+              col="red",
+              linetype="dashed") +
+  scale_color_viridis("% Absolute Error ", option="plasma", end=0.8) +
+  theme_pander() +
+#  geom_smooth(method="lm") +
+
+  theme(legend.position = "right") +
+#        legend.  = element_text()) +
+#  guides(col=guide_legend("Error")) +
+  coord_fixed(xlim=c(0.25, 0.4), ylim=c(0.25, 0.4)) +
+  annotate("text", x=0.3, y=0.35,
+           label=paste("r(33) =", 
+                       floor(100*cor(Y, Yp))/100)) +
+  ylab("Observed Rate of Forgetting") +
+  xlab("Predicted Rate of Forgetting") +
+  ggtitle("Rates of Forgetting:\nCross-Validation") +
+  theme(legend.position = "bottom")
+  
+ggMarginal(p, 
+           fill="blue", alpha=0.5,
+           type="density", #bins=13, 
+           col="blue",
+           margins = "both")
+
+```
+
+And now, let's visualize the beta weights of the connections
+
+```{r, fig.width=8, fig.height=5}
+colnames(Xe) <- paste("Connection", 1:25, paste="")
+wconnections <- as_tibble(Xe)
+lconnections <- pivot_longer(wconnections, cols=colnames(Xe), 
+                             names_to="Connection", values_to = "Beta")
+
+ggplot(lconnections, aes(x = Connection, y = Beta)) +
+  stat_summary(fun.data = "mean_sdl", geom="col", fill="blue", alpha=0.4) +
+  stat_summary(fun.data = "mean_sdl", geom="errorbar", width=0.25) +
+  scale_x_discrete(labels = connectome$network_names) +
+  ggtitle("Connection Weights\nAcross Cross-Validation") +
+  ylab("Beta Weight") +
+  geom_hline(yintercept = 0) +
+  theme_pander() +
+  theme(axis.text.x = element_text(angle=90, hjust=1)) +
+  coord_flip()
 ```
