@@ -30,7 +30,7 @@ library(ggthemes)
 ## Load the data
 
 ```{r}
-nets <- read_csv("network_stats.csv",
+nets <- read_csv("network_stats_partial.csv",
                  col_types = cols(Subject = col_character(),
                                   Cl = col_double(),
                                   Cr = col_double(),
