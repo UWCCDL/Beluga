@@ -440,9 +440,12 @@ To analyzie the data, we will use Lasso, a statitical learning system based on p
 ## Defining the model
 
 ```{r}
+
+Z <-(log(1+X) / log(1-X)) / 2
+
 # fit <- ncvreg
 fit <- glmnet(y = Y,
-              x = X,
+              x = Z,
                alpha=1,
               #lambda.min = 0.5,
              #lam= 0.04978707,#log(length(Y)),
@@ -452,8 +455,8 @@ fit <- glmnet(y = Y,
 #fit.cv <- cv.ncvreg(y = Y,
 
 fit.cv <- cv.glmnet(y = Y,
-                    x = X,
-                     alpha=1,
+                    x = Z,
+                    alpha=1,
                    # lam=exp(seq(-3, -10, -0.1)),
                    #penalty="SCAD",
                     standardize=T,
