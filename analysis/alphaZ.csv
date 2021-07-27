@@ -1,0 +1,31 @@
+index,network,network_names,connection,censor,Beta
+7681,1-1,Sensory/somatomotor Hand-Sensory/somatomotor Hand,25-30,TRUE,-0.03042313671566372
+9268,1-1,Sensory/somatomotor Hand-Sensory/somatomotor Hand,28-36,TRUE,-0.0069311365306117725
+10335,1-1,Sensory/somatomotor Hand-Sensory/somatomotor Hand,39-40,TRUE,0.008805062609008001
+15363,3-3,Cingulo-opercular Task Control-Cingulo-opercular Task Control,51-59,TRUE,0.055472305310746824
+19072,4-4,Auditory-Auditory,64-73,TRUE,-0.05697676275266166
+28883,5-5,Default mode-Default mode,107-110,TRUE,0.13178715683782966
+29405,5-5,Default mode-Default mode,101-112,TRUE,-0.005770089739512131
+30209,5-5,Default mode-Default mode,113-115,TRUE,-0.03351143431868298
+33920,5-5,Default mode-Default mode,128-129,TRUE,0.018458579211475395
+34438,5-5,Default mode-Default mode,118-131,TRUE,-0.06611848433691547
+34707,-1-5,Uncertain-Default mode,123-132,TRUE,0.03347635499324291
+35653,1-6,Sensory/somatomotor Hand-Memory retrieval?,13-136,TRUE,0.0661513340174944
+35734,5-6,Default mode-Memory retrieval?,94-136,TRUE,-0.021645973955741634
+37612,5-7,Default mode-Visual,124-143,TRUE,0.009001560587315166
+38953,7-7,Visual-Visual,145-148,TRUE,-0.01748085735840714
+40009,7-7,Visual-Visual,145-152,TRUE,0.06341347724545034
+44509,7-7,Visual-Visual,157-169,TRUE,0.019445831747506803
+45569,7-7,Visual-Visual,161-173,TRUE,-0.06389456783391037
+46245,2-8,Sensory/somatomotor Mouth-Fronto-parietal Task Control,45-176,TRUE,0.02947603702653373
+52988,8-8,Fronto-parietal Task Control-Fronto-parietal Task Control,188-201,TRUE,0.007297257639093548
+58004,8-9,Fronto-parietal Task Control-Salience,188-220,TRUE,0.03889121135438665
+59360,10-10,Subcortical-Subcortical,224-225,TRUE,0.007417249803609597
+59622,10-10,Subcortical-Subcortical,222-226,TRUE,0.006928255429618996
+60683,10-10,Subcortical-Subcortical,227-230,TRUE,-0.04234433187340099
+60950,10-10,Subcortical-Subcortical,230-231,TRUE,-0.06185832255344341
+61041,3-10,Cingulo-opercular Task Control-Subcortical,57-232,TRUE,2.6262732310799515e-5
+62951,5-11,Default mode-Ventral attention,119-239,TRUE,0.04911428813925498
+64395,13-13,Cerebellar-Cerebellar,243-244,TRUE,-0.010545050311048547
+64806,5-13,Default mode-Cerebellar,126-246,TRUE,0.04901875839443991
+67873,1-12,Sensory/somatomotor Hand-Dorsal attention,25-258,TRUE,0.018196371916148233
