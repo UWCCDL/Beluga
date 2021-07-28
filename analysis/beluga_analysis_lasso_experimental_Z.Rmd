@@ -503,8 +503,8 @@ connectome <- order %>%
    filter(Beta != 0) %>%
   arrange(index)
 
-write_csv(connectome, file="alpha4.csv")
-save(fit, fit.cv, X, Y, order, I, G, file="alpha4.RData")
+write_csv(connectome, file="alphaZ.csv")
+save(fit, fit.cv, X, Y, order, I, G, file="alphaZ.RData")
 
 ```
 
@@ -702,7 +702,7 @@ ggMarginal(p,
 And now, let's visualize the beta weights of the connections
 
 ```{r, fig.width=8, fig.height=5}
-colnames(Xe) <- paste("Connection", 1:25, paste="")
+colnames(Xe) <- paste("Connection", 1:nrow(connectome), paste="")
 wconnections <- as_tibble(Xe)
 lconnections <- pivot_longer(wconnections, cols=colnames(Xe), 
                              names_to="Connection", values_to = "Beta")

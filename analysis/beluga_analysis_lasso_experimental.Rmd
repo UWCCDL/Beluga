@@ -715,7 +715,7 @@ ggplot(lconnections, aes(x = Connection, y = Beta)) +
   theme(axis.text.x = element_text(angle=90, hjust=1)) +
   coord_flip()
 
-ggplot(lconnections, aes(x = Connection, y = Beta)) +
+ggplot(lconnections, aes(x = reorder(Connection, Beta), y = Beta)) +
   geom_point(aes(col=Beta), alpha=.5, 
              size=2,
              position = position_jitter(height = 0, width = 0.3)) +
@@ -731,6 +731,7 @@ ggplot(lconnections, aes(x = Connection, y = Beta)) +
                            ")", sep="")) +
   ggtitle("Connection Weights\nAcross Cross-Validation") +
   ylab(expression(paste(beta, " value"))) +
+  xlab("Connection") +
   geom_hline(yintercept = 0, col="grey") +
   stat_summary(fun.data = "mean_cl_boot", 
                col="black", geom="errorbar", width=1) +
@@ -739,6 +740,7 @@ ggplot(lconnections, aes(x = Connection, y = Beta)) +
   theme_pander() +
   theme(axis.text.y = element_text(angle=0, hjust=1),
         legend.position = "NA") +
+  ylim(-0.05, 0.1) +
   coord_flip()
 ```
 
@@ -860,3 +862,14 @@ ggplot(vifsT, aes(x=VIF)) +
   ggtitle("Distribution of Variance Inflation Factors")
 ```
 
+```{r}
+rois <- c(vregion_from(connectome$connection), vregion_to(connectome$connection))
+rois_t <- tibble(roi = rois)
+rois_t %>%
+  group_by(roi) %>%
+  summarize(N = length(roi)) %>%
+  xtable() %>%
+  kable(digits = 5) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
