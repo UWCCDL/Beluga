@@ -1,5 +1,5 @@
 ---
-title: "Beluga Project Analysis"
+title: "Predicting Python Programming Accuracy from Resting-State fMRI"
 output:
   html_document:
     code_folding: hide
@@ -39,90 +39,9 @@ library(patchwork)      # Multi-plot alignment
 
 ```
 
-# Beluga: Predicting Individual Rates of Forgetting from Resting-State Functional Connectivity
+# Predicting Python Programming Accuracy from Resting-State Functional Connectivity
 
-The goal of this project is to test whether individal differences in rates of forgetting (the $\alpha$ parameter in Pavlick & Anderson's 2005 model) could be decoded from resting state fMRI.
-
-## Underlying memory model
-
-The underlying memory model is John Anderson's ACT-R, where memory activation changes as a function of the decay of its underlying traces.
-
-```{r fig.width=6, fig.height=6}
-# Simulate ACT-R
-decay <- function(time, t0=0, rate=.5) {
-    if (time <= t0) {
-      NA
-    } else {
-      (time - t0)**(-rate)
-    }
-}
-
-vdecay <- Vectorize(decay)
-
-time <- seq(1, 100, 0.1)
-
-t1 = vdecay(time, t0=1)
-t2 = vdecay(time, t0=20)
-t3 = vdecay(time, t0=55)
-t4 = vdecay(time, t0=65)
-
-
-traces_df <-tibble(Time=time, 
-                   trace1 = vdecay(time, t0=1),
-                   trace2 = vdecay(time, t0=20),
-                   trace3 = vdecay(time, t0=55),
-                   trace4 = vdecay(time, t0=65))
-
-
-ltraces_df <- traces_df %>%
-  pivot_longer(cols = c("trace1", "trace2", "trace3", "trace4"),
-               names_to = "Trace", values_to="Activation")
-
-ltraces_df$Trace <- fct_recode(ltraces_df$Trace, 
-                        "Trace 1" = "trace1",
-                        "Trace 2" = "trace2",
-                        "Trace 3" = "trace3",
-                        "Trace 4" = "trace4")
-
-ltraces_df <- ltraces_df %>%
-  add_column(Source="Individual Traces")
-
-t1[is.na(t1)] <-0
-t2[is.na(t2)] <-0
-t3[is.na(t3)] <-0
-t4[is.na(t4)] <-0
-
-memory <- log(t1+t2+t3+t4)
-
-memory_df <- tibble(Time=time, 
-                  Activation = memory,
-                  Trace = "Memory",
-                  Source="Memory")
-
-
-p1 <- ggplot(ltraces_df, 
-       aes(x=Time, y=Activation, col=Trace)) +
-  geom_line(size=1,
-            alpha=1) +
-  ylab("Retrieval Odds") +
-  ggtitle("Individual Traces") +
-  scale_color_viridis("", option="plasma", discrete=T, end = .8, direction=1) +
-  #scale_color_d3() +
-  theme_pander()
-
-p2 <- ggplot(memory_df, 
-       aes(x=Time, y=Activation)) +
-  geom_line(size=1,
-            alpha=0.5,
-            col="blue") +
-  ylab("Memory Activation") +
-  ggtitle("Memory") +
-  theme_pander()
-
-p1 / p2
-```
-
-
+The goal of this project is to test whether individual differences in programmig accuracy can be decoded from resting state fMRI.
 
 ## Load and transform the data for every subject
 
@@ -309,16 +228,23 @@ for (sub in dir("../rsfmri/")[grep("sub-*", dir("../rsfmri/"))]) {
   
   j <- j + 1
 }
+```
 
+We will also need Python-compatible matrices for visualization. They can be created ex-novo by setting this parameter to T
+
+```{r}
 # Create python-compatible data
-#
-# for (sub in dir()[grep("sub-*", dir())]) {
-#   R1 <- read.table(paste(sub, "R.txt", sep="/"))
-#   R2 <- read.table(paste(sub, "PR.txt", sep="/"))
-#   write.table(R1, paste(sub, "R_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
-#   write.table(R2, paste(sub, "PR_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
-# }
 
+CREATE_PYTHON = F
+
+if ( CREATE_PYTHON ) {
+  for (sub in dir()[grep("sub-*", dir())]) {
+    R1 <- read.table(paste(sub, "R.txt", sep="/"))
+    R2 <- read.table(paste(sub, "PR.txt", sep="/"))
+    write.table(R1, paste(sub, "R_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
+    write.table(R2, paste(sub, "PR_py.txt", sep="/"), sep = " ", row.names = F, col.names=F)
+  }
+}
 ```
 
 ## Define the Networks
@@ -328,18 +254,18 @@ Now, we can restrict the analysis only to a limited set of networks (and their c
 ```{r}
 NOI <- c(
   "Uncertain",
-"Sensory/somatomotor Hand",
-"Sensory/somatomotor Mouth",
+  "Sensory/somatomotor Hand",
+  "Sensory/somatomotor Mouth",
   "Cingulo-opercular Task Control",
   "Auditory",
-   "Default mode",
+  "Default mode",
   "Memory retrieval?",
   "Ventral attention",
   "Visual",
   "Fronto-parietal Task Control",
   "Salience",
-"Subcortical",
- "Cerebellar",
+  "Subcortical",
+  "Cerebellar",
   "Dorsal attention"
 )
 
@@ -349,7 +275,7 @@ COI <- outer(NOI,
 ```
 
 
-Now, we need to remove some columns from the hyper-large X matrix, and define proper groupings for Lasso.
+Now, we need to remove some columns from the hyper-large _X_ matrix of regressors, and define proper groupings for Lasso.
 
 ```{r}
 # Here we simplify create a tibble which the X columns, and create a censor column to decide which ones to keep
@@ -358,7 +284,7 @@ censor <- outer(power2011$ROI,
                 power2011$ROI, 
                 function(x, y) {x < y}) %>% as.vector()
 
-censor2 <- colMeans(C) %>% abs() > 0.1
+censor2 <- colMeans(C) %>% abs() > 0.12
 
 order <- tibble(index = 1:length(nets), 
                 network = nets, 
@@ -381,24 +307,28 @@ G <- order %>%
   dplyr::select(network) 
 # G is the real grouping factor for Lasso!
 
-# The real X:
-X <- C[,as_vector(I)]
+# The real set of regressors:
+R <- C[,as_vector(I)]
 ```
 
 ## Load the dependent variable $Y$
 
-Now we need to load the dependent variable. In this case, it is the rate of forgetting $alpha$, which is stored as part of the participants' meta-data in `participats.tsv`. 
+Now we need to load the dependent variable, which, in this case, is the programming accuracy. To do this, we need to merge two datasets, the list ofparticipants' meta-data in `participats.tsv` and the list of Python-related outcomes in `Python_Outcomes.csv`.
 
-Note that we could not measure $alpha$ for all participants, so we have to keep track of which rows in the $X$ regressor matrix we want to exclude from our Lasso analysis.
+Note that we could not measure the programing accuracy $A_P$ for all participants, so we have to keep track of which rows in the $X$ regressor matrix we want to exclude from our Lasso analysis.
 
 ```{r}
-dvs <- read.table("../rsfmri/participants.tsv", sep="\t", header=T)
-keep <- !is.na(dvs$Alpha)  & !dvs$Subject %in% NOFLY
-Y <- dvs$Alpha[keep]
-X <- X[keep,]
+dvs1<- read_tsv("../rsfmri/participants.tsv")
+dvs2 <- read_csv("PythonOutcomes.csv") %>%
+  filter(Subject != "NO RS") %>%
+  filter(Subject != "sub-048")
+dvs <- full_join(dvs1, dvs2)
+keep <- !is.na(dvs$ProgrammingAccuracy)  & !dvs$Subject %in% NOFLY
+Y <- dvs$ProgrammingAccuracy[keep]
+X <- R[keep,]
 ```
 
-The regressors $X$ is certainly multi-collinear. To gather a sense of how much it is so, we can plot the distribution of correlations among regressors:
+The regressors $X$ is certainly multi-collinear. To gather a sense of how much it is so, we can plot the distribution of the correlations among regressors. They should be normally distributed around zero, and the smaller is the standard deviation, the better it is.
 
 ```{r}
 corX <- cor(X)
@@ -417,17 +347,17 @@ ggplot(distTibble, aes(x=R)) +
 And now, let's visualize the historgram of the dependent variable we are trying to predict:
 
 ```{r}
-dependent <- as_tibble(data.frame(alpha=Y))
+dependent <- as_tibble(data.frame(ProgrammingAccuracy = Y))
 #d3 <- pal_d3()
 #kol = d3(7)
 
-ggplot(dependent, aes(x=alpha, fill=cut(alpha, 7))) +
-  geom_histogram(bins=8, col="white", alpha=0.5) +
+ggplot(dependent, aes(x=ProgrammingAccuracy, fill=cut(ProgrammingAccuracy, 10))) +
+  geom_histogram(col="white", alpha=0.5, bins=30) +
   scale_fill_viridis(option = "plasma", discrete=T) +
   geom_vline(xintercept = mean(dependent$alpha)) +
-  xlab(expression(paste("Rate of Forgetting ", alpha)))+
+  xlab(expression(paste("Programming Accuracy (", A[P], ")")))+
   ylab("Number of Participants") +
-  ggtitle("Distribution of Rates of Forgetting") +
+  ggtitle("Distribution of Programming Accuracy") +
   theme_pander() +
   theme(legend.position = "none")
 
@@ -440,22 +370,15 @@ To analyzie the data, we will use Lasso, a statitical learning system based on p
 ## Defining the model
 
 ```{r}
-# fit <- ncvreg
 fit <- glmnet(y = Y,
               x = X,
-               alpha=1,
-              #lambda.min = 0.5,
-             #lam= 0.04978707,#log(length(Y)),
+              alpha=1,
               standardize = T
 )
 
-#fit.cv <- cv.ncvreg(y = Y,
-
 fit.cv <- cv.glmnet(y = Y,
                     x = X,
-                     alpha=1,
-                   # lam=exp(seq(-3, -10, -0.1)),
-                   #penalty="SCAD",
+                    alpha=1,
                     standardize=T,
                     nfolds=length(Y)
 )
@@ -500,8 +423,8 @@ connectome <- order %>%
    filter(Beta != 0) %>%
   arrange(index)
 
-write_csv(connectome, file="alpha4.csv")
-save(fit, fit.cv, X, Y, order, I, G, file="alpha4.RData")
+write_csv(connectome, file="chantel.csv")
+save(fit, fit.cv, X, Y, order, I, G, file="chantel.RData")
 
 ```
 
@@ -512,7 +435,6 @@ connectome %>%
   xtable() %>%
   kable(digits = 5) %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
-
 ```
 
 And we can do some statistics. For example, which networks do these regions and connections belong to? Are they different from what would be expected from a random sample of connections from the connectome?
@@ -549,7 +471,6 @@ ggplot(total_stats, aes(x="", y=N, fill=NetworkName)) +
   facet_grid(~Source, labeller = label_both) +
   coord_polar("y", start=0) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 2L)) +
-  #scale_fill_viridis(discrete = T) +
   scale_fill_ucscgb() +
   ylab("") +
   xlab("") +
@@ -564,13 +485,12 @@ ggplot(total_stats, aes(x="", y=N, fill=NetworkName)) +
 There is no difference in the distribution of ROIs:
 
 ```{r}
-chisq.test(roi_stats$N*length(lROIs), p=noi_stats$N)
+chisq.test(roi_stats$N*length(lROIs), p=roi_stats$N)
 ```
 
 And now, let's look at the sparsity
 
 ```{r}
-
 net_from <- function(s) {as.character(strsplit(s, "-")[[1]][1])}
 net_to <- function(s) {as.character(strsplit(s, "-")[[1]][2])}
 
@@ -626,14 +546,25 @@ ggplot(total_stats2, aes(x="", y=P, fill=connection_type)) +
   theme(legend.position = "bottom")
 ```
 
-The differnece in distribution is  
+The difference in distribution is  
 
 ```{r}
 chisq.test(connectome_stats$N, p=coi_stats$P)
 ```
 
+## Visualizing the data
 
-## Cross Validated Predictions
+Here are the connections in the brain:
+
+![Connectivity](figures/prog_acc_pretty.png)
+
+
+And here is their relative network importance, visualized as a relative size:
+
+![Importance](figures/prog_acc_importance_size.png)
+
+
+## Cross-Validated Predictions
 
 How well is the model doing? To investigate this, we can hand-craft a Leave-One Out regression model and save the predicted values of rate of forgetting as well as the recorded beta weights.
 
@@ -662,23 +593,19 @@ Now, let's do a real predicted vs. observed graph:
 
 ```{r, fig.width=5, fig.height=5}
 wcomparison <- tibble(Observed = Y,
-                     Predicted = Yp)
+                      Predicted = Yp)
               
 p <- ggplot(wcomparison, aes(x=Predicted, y=Observed, 
-                             col=(abs(100*(Predicted-Observed)/Observed)))) +
+                             col=(abs(100 * (Predicted - Observed) / Observed)))) +
   geom_point(size=4, alpha=0.6) +
   geom_abline(intercept = 0, slope = 1, 
               col="red",
               linetype="dashed") +
   scale_color_viridis("% Absolute Error ", option="plasma", end=0.8) +
   theme_pander() +
-#  geom_smooth(method="lm") +
 
   theme(legend.position = "right") +
-#        legend.  = element_text()) +
-#  guides(col=guide_legend("Error")) +
-  coord_fixed(xlim=c(0.25, 0.4), ylim=c(0.25, 0.4)) +
-  annotate("text", x=0.3, y=0.35,
+  annotate("text", x=10, y=40,
            label=paste("r(33) =", 
                        floor(100*cor(Y, Yp))/100)) +
   ylab("Observed Rate of Forgetting") +
@@ -699,7 +626,7 @@ ggMarginal(p,
 And now, let's visualize the beta weights of the connections
 
 ```{r, fig.width=8, fig.height=5}
-colnames(Xe) <- paste("Connection", 1:25, paste="")
+colnames(Xe) <- paste("Connection", 1:nrow(connectome), paste="")
 wconnections <- as_tibble(Xe)
 lconnections <- pivot_longer(wconnections, cols=colnames(Xe), 
                              names_to="Connection", values_to = "Beta")
@@ -714,8 +641,6 @@ ggplot(lconnections, aes(x = Connection, y = Beta)) +
   theme_pander() +
   theme(axis.text.x = element_text(angle=90, hjust=1)) +
   coord_flip()
-
-connectome <- connectome %>% arrange(Beta)
 
 ggplot(lconnections, aes(x = reorder(Connection, Beta), y = Beta)) +
   geom_point(aes(col=Beta), alpha=.5, 
@@ -736,13 +661,13 @@ ggplot(lconnections, aes(x = reorder(Connection, Beta), y = Beta)) +
   xlab("Connection") +
   geom_hline(yintercept = 0, col="grey") +
   stat_summary(fun.data = "mean_cl_boot", 
-               col="black", geom="errorbar", width=1) +
+               col="black", geom="errorbar", width=0.2) +
   #scale_color_viridis(option="plasma", begin=0.2, end=0.9) +
   
   theme_pander() +
   theme(axis.text.y = element_text(angle=0, hjust=1),
         legend.position = "NA") +
-  ylim(-0.05, 0.1) +
+  #ylim(-0.05, 0.1) +
   coord_flip()
 ```
 
@@ -849,7 +774,7 @@ And, finally, we can plot an histogram of the distribution of VIF values.
 
 ```{r}
 ggplot(vifsT, aes(x=VIF)) +
-  geom_histogram(col="white", binwidth = 0.5, fill="blue", alpha=0.4) +
+  geom_histogram(col="white", binwidth = 0.25, fill="blue", alpha=0.4) +
   theme_pander() +
   xlab("VIF Value") +
   ylab("Number of Predictors") +
