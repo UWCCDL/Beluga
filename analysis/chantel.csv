@@ -1,8 +1,0 @@
-index,network,network_names,connection,censor,Beta
-8736,1-1,Sensory/somatomotor Hand-Sensory/somatomotor Hand,24-34,TRUE,7.049568074918236
-23837,5-5,Default mode-Default mode,77-91,TRUE,1.8535977148724898
-24566,1-5,Sensory/somatomotor Hand-Default mode,14-94,TRUE,-1.1445391732776289
-42128,7-7,Visual-Visual,152-160,TRUE,2.8549955466525705
-42861,5-7,Default mode-Visual,93-163,TRUE,3.9869011824579053
-53782,8-9,Fronto-parietal Task Control-Salience,190-204,TRUE,1.22060694048032
-55525,-1-9,Uncertain-Salience,85-211,TRUE,-0.13832589197241482
