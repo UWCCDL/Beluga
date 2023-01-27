@@ -863,3 +863,71 @@ ggplot(vifsT, aes(x=VIF)) +
   ggtitle("Distribution of Variance Inflation Factors")
 ```
 
+# Brainconn
+
+Create the atlas
+
+```{r}
+pow264 <- power2011
+names(pow264)[1:4] <- c("ROI.Name",  "x.mni", "y.mni", "z.mni")
+pow264$x.mni <- as.integer(pow264$x.mni)
+pow264$y.mni <- as.integer(pow264$y.mni)
+pow264$z.mni <- as.integer(pow264$z.mni)
+```
+
+Create the matrix
+
+```{r}
+N <- nrow(pow264)
+connMatrix <- matrix(rep(0, N**2), ncol=N) 
+
+set_beta <- function(conn, beta) {
+  temp <- str_split(conn, "-")
+  i <- as.integer(temp[[1]][1])
+  j <- as.integer(temp[[1]][2])
+  connMatrix[i, j] <<- beta
+  connMatrix[j, i] <<- beta
+}
+
+vset_beta <- Vectorize(set_beta)
+
+connectome %>%
+  mutate(Done <- vset_beta(connection, Beta))
+
+#vset_beta(connectome$connection, connectome$Beta)
+
+```
+
+And now, visualize
+
+```{r, fig.width=5, fig.height=4}
+p1 <- ggMarginal(p)
+
+p2 <- brainconn(atlas=pow264, 
+          #conmat=as.matrix(connMatrix !=0)+0,
+          conmat=connMatrix,
+          #node.size = 3, 
+          view="bottom", 
+          #node.color="network", 
+          #edge.color="black", 
+          #edge.width =0.5,
+          labels=T,
+          scale.edge.width=c(1,2),
+          label.size = 3,
+          background.alpha=1,
+          thr=0.025,
+          edge.color.weighted=F, 
+          #show.legend=T,
+)  +
+    #scale_fill_d3(palette="category20") +
+  guides(fill="none") +
+  scale_fill_viridis() +
+  theme(legend.position = "left") +
+  labs(col="", fill="none")
+
+
+ggsave(p, width=4, height=4, filename="p1.png")
+ggsave(p2, width=6, height=4, filename="p2.png")
+```
+
+
