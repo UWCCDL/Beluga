@@ -1,8 +1,0 @@
-while read line; do
-    echo "$line" | ~abin 
-	~/abin/3dmaskdump -mask region_cau.nii \
-			  -o region_cau.txt    \
-			  -noijk               \
-			  func/swasub-032_task-rest_bold.nii 
-
-done < power_2010.txt
