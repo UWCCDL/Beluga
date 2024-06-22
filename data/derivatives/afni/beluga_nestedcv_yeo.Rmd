@@ -1,0 +1,667 @@
+---
+title: "Beluga: Analysis of Functional Connectivity With Yeo (2011) Network Parcels"
+output:
+  html_document:
+    code_folding: hide
+    theme: yeti
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  word_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(ggthemes)
+library(ppcor)
+library(reshape2)
+library(glmnet)
+library(ggseg)
+library(ggsegYeo2011)
+library(kableExtra)
+library(xtable)
+library(broom)
+library(ggsci)
+library(nestedcv)
+library(car)
+library(ggrepel)
+```
+
+# Analysis of Functional Connectivity in Beluga
+
+First, we need to explicitly label the Yeo (2011) network parcels that were used
+to extract the time series from every participant.
+
+```{r}
+yeo17networks <- read_csv("yeo17.csv", show_col_types = F)
+networks <- yeo17networks$region[2:18]
+```
+
+From this data, we need to extract the color and name information. 
+
+```{r, fig.width=7, fig.height=3.5}
+yeo17colors <- rgb(yeo17networks[2:18,2:4], 
+                   maxColorValue = 255)
+
+# This is needed to make sure the colors are assigned to the right networks
+names(yeo17colors) <- networks 
+```
+
+And, finally, we can visualize the Yeo parcellation using the original color 
+scheme.
+
+```{r}
+# Visualize the Yeo parcellation
+ggplot(tibble(region=networks), aes(fill=region)) +
+  geom_brain(atlas = ggsegYeo2011::yeo17, 
+             position = position_brain("horizontal"),
+             color="white") + 
+  scale_fill_manual(values = yeo17colors,
+                    na.value = "black") +
+  labs(fill = "") +
+  ggtitle("Yeo et al. (2011) 17-Network Parcellation") +
+  theme_void()+
+  theme(legend.position = "bottom") +
+  guides(fill=guide_legend(ncol=4))
+  
+```
+
+# Data Preparation
+
+## Extracting Individual Connectomes
+
+Now we need to create the functional connectivity matrix (the "connectome") for
+every single participant in the dataset. In this case, the connectome is a 17x17
+matrix containing the correlations between the time series of every pair of 
+networks.
+
+In fact, we will create _two_ such connectomes: one using standard Pearson 
+correlation coefficients (matrix `R`) and one using partial correlation 
+coefficients (matrix `PR`), where the correlations between networks are computed
+after partialling out their correlations with every other network. 
+
+This step needs to be done only once, and can be skipped by setting the 
+`CREATE_FC`  variable to `F`. 
+
+```{r}
+CREATE_FC = F
+
+if (CREATE_FC) {
+  for (sub in dir()[grep("sub-*", dir())]) {
+    netdata <- NULL
+    for (network in 1:17) {
+      file_name <- paste(sub,
+                         "_yeo17_network",
+                         sprintf("%02d", network),  
+                         "_ss.txt",
+                         sep="")
+      #mat <- t(read.table(paste(sub, "func", file_name, sep="/")))
+      #pc1 <- prcomp(mat)  # PCA
+      #pc1 <- pc1$x[,1]    # first PC
+      mat <- colMeans(read.table(paste(sub, "func", file_name, sep="/")))
+      pc1 <- mat
+      table <- tibble(subject = sub,
+                      scan = 1:210,
+                      timeseries = pc1,
+                      network = network)
+      if (is.null(netdata)) {
+        netdata <- table
+      } else {
+        netdata %<>% bind_rows(table)
+      }
+    }
+    
+    # Pivot long data format into wide data 
+    wnetdata <- netdata %>% pivot_wider(id_cols = scan, 
+                                        names_from = network, 
+                                        values_from = timeseries)
+    X  <- as.matrix(wnetdata[,2:18])/1000 
+    PR <- pcor(X)$estimate
+    R  <- cor(X)
+    
+    # Generate matrices:
+    
+    # The partial correlation matrix
+    long_pr <- melt(PR)
+    #pdf(paste(sub, "fc_pcorr.pdf", sep="/"))
+    ggplot(long_pr, aes(x=Var1, y=Var2)) +
+      geom_tile(aes(fill=value)) +
+      coord_equal() +
+      scale_fill_gradient2(limits=c(-1,1), 
+                           low = "blue", 
+                           high = "red", 
+                           mid = "white") +
+      theme_pander() +
+      ggtitle(paste(sub, ": Functional Connectivity (Partial Correlations)", sep="")) +
+      xlab("Networks") +
+      ylab("Networks") 
+    #dev.off()
+    ggsave(paste(sub, "fc_pcorr.pdf", sep="/"),
+           width=6, height=5)
+    write.table(PR, col.names = T, 
+                row.names = T, 
+                file = paste(sub, "PR.txt", sep="/"))
+    
+    # The standard correlation matrix
+    long_r <- melt(R)
+    #pdf(paste(sub, "fc_corr.pdf", sep="/"))
+    ggplot(long_r, aes(x=Var1, y=Var2)) +
+      geom_tile(aes(fill=value)) +
+      coord_equal() +
+      scale_fill_gradient2(limits=c(-1,1), low = "blue", high = "red", mid = "white") +
+      theme_pander() +
+      ggtitle(paste(sub, ": Functional Connectivity, (Standard Correlations)", sep="")) +
+      xlab("Networks") +
+      ylab("Networks") 
+    #dev.off()
+    ggsave(paste(sub, "fc_corr.pdf", sep="/"),
+           width=6, height=5)
+    write.table(R, col.names = T, 
+                row.names = T, 
+                file = paste(sub, "R.txt", sep="/"))
+  }
+}
+```
+
+## Checking patterns of connectivity
+
+One the connectomes have been created, we can visualize the average 
+connectivity.
+
+```{r}
+## Load each subject's PR matrix and average them together after removing the diagonal and Z-transforming all the values
+connectome <- NULL
+
+for (sub in dir()[grep("sub-*", dir())]) {
+  P <- read.table(paste(sub, "PR.txt", sep="/"))
+  P <- cbind(networks, P)
+  colnames(P) <- c("From", networks)
+  wpconn <- as_tibble(P)
+  lpconn <- wpconn %>% pivot_longer(cols = -From, names_to = "To", values_to = "Value") %>%
+    add_column(Participant = sub, Correlation = "Partial Correlation")
+  
+  R <- read.table(paste(sub, "R.txt", sep="/"))
+  R <- cbind(networks, R)
+  colnames(R) <- c("From", networks)
+  wrconn <- as_tibble(R)
+  lrconn <- wrconn %>% pivot_longer(cols = -From, names_to = "To", values_to = "Value") %>%
+    add_column(Participant = sub, Correlation = "Pearson Correlation") 
+  
+  
+  conn <- bind_rows(lpconn, lrconn)
+  
+  if (is.null(connectome)) {
+    connectome <- conn
+  } else {
+    connectome %<>% bind_rows(conn)
+  }
+}
+
+connectome %>% mutate(Z = atanh(Value)) %>% 
+  group_by(From, To, Correlation) %>% 
+  summarize(Z=mean(Z)) %>%
+  mutate(R = tanh(Z)) -> mean_connectome
+
+mean_connectome$Correlation <- factor(mean_connectome$Correlation, 
+                                      levels=c("Pearson Correlation", "Partial Correlation"))
+
+# Plot mean connectome values as a tile plot, with the diagonal removed
+ggplot(mean_connectome, aes(x=From, y=To)) +
+  geom_tile(aes(fill=R), color="white") +
+  scale_fill_gradient2(limits=c(-1, 1), low = "blue", high = "red", mid = "white", na.value="grey") +
+  ggtitle("Mean Functional Connectivity") +
+  coord_equal() +
+  facet_wrap(~Correlation) +
+  xlab("") +
+  ylab("") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(angle = 0, hjust = 1))
+
+  
+```
+
+## Load the group-level data
+
+We now need to load the group level data. To apply ML methods, we need the data 
+from all participants to be put into a matrix _X_ in which every individual is a 
+row and every columns is a different Network-to-Network connection.
+
+Because we have a small number of participants for whom we need the speed of 
+forgetting, we need to reduce the connectivity matrix. For this reason, we will 
+focus on the three networks that make up the Default Mode Network in Yeo (2011), 
+which are named Default A, B, and C, and their connectivity with any of the 
+other networks. This will results in 3 x 16 - 3 = 45 regressors.
+
+Here are the three networks.
+
+```{r}
+## Creates a tibble where every regions is marked as NA 
+
+defaults <- tibble(region = networks,
+                   value = NA)
+
+## Change the value of three networks that we are interested in; their values
+## are set to the network name.
+
+defaults$value[defaults$region == "Default A"] <- "Default A"
+defaults$value[defaults$region == "Default B"] <- "Default B"
+defaults$value[defaults$region == "Default C"] <- "Default C"
+
+## Visualization of the three networks
+
+## Add scale_color_viridis with discrete values
+
+ggplot(defaults, aes(fill=value)) +
+  geom_brain(atlas = ggsegYeo2011::yeo17, 
+             position = position_brain(hemi ~ side),
+             color="white") +
+  scale_fill_brewer(type = "qual", palette = "Set2", na.value="lightgrey") +
+  labs(fill = "Network") +
+  ggtitle("Default Mode Networks in Yeo et al. (2011") +
+  theme_void() 
+
+ggsave("defaults.png")
+```
+
+And here is how we create the regressor matrix _X_.
+
+```{r}
+NOFLY <- c()
+cols <- outer(1:17, 1:17, function(x, y) {paste(x, y, sep="-")})
+cols %<>% as.vector
+
+connection <- function(x, y) {
+  paste(min(x, y), max(x, y), sep="-")
+}
+
+vconnection <- Vectorize(connection)
+
+Mode <- function(x, na.rm=F) {
+  if (na.rm) {
+    x = x[!is.na(x)]
+  }
+  ux <- unique(x)
+  return(ux[which.max(tabulate(match(x, ux)))])
+}
+
+k <- 3 * 16 - 3
+n <- length(grep("sub-*", dir()))
+X <- matrix(data = rep(0, k*n), nrow =  n)
+
+j <- 1
+
+for (sub in dir()[grep("sub-*", dir())]) {
+  M <- read.table(paste(sub, "PR.txt", sep="/"))
+  M[upper.tri(M, diag = T)] <- NA
+  M <- M[15:17,]
+  v <- M[!is.na(M)]
+  
+  X[j,] <- v
+  if (length(v[is.na(v)]) > 0) {
+    print(paste("NA detected in sub", sub))
+    NOFLY %<>% c(sub)  # Adds sub to NOFLY list
+  }
+  j <- j + 1
+}
+
+```
+
+
+## Load the dependent variable $Y$: The Speed of Forgetting
+
+Now we need to load the dependent variable _Y_. In this case, the variable is 
+the speed of forgetting $phi$, which is stored as part of the participants' 
+meta-data in `participats.tsv`. 
+
+Note that we could not measure $phi$ for all participants, so we have to keep
+track of which rows in the $X$ regressor matrix we want to exclude from our 
+LASSO analysis.
+
+```{r}
+dvs <- read.table("participants.tsv", sep="\t", header=T)
+keep <- !is.na(dvs$Alpha)  & !dvs$Subject %in% NOFLY
+Y <- dvs$Alpha[keep]
+X <- X[keep,]
+```
+
+And this is what the distribution of SOF values looks like:
+
+```{r, fig.width=4, fig.height=4}
+ggplot(dvs[keep,], aes(x=Alpha)) +
+  geom_histogram(binwidth=0.02, fill="darkgrey", alpha=0.75, color="white") +
+  ggtitle("Distribution of Speed of Forgetting") +
+  ylab("Frequency") +
+  
+  # Add a vertical line with the mean value of SOF
+  geom_vline(xintercept=mean(dvs$Alpha[keep]), 
+             color="blue", linetype=1) +
+  annotate("label", x=0.34, y=10, 
+           color="blue",
+           label = paste("Mean SOF =",
+                         round(mean(dvs$Alpha[keep]), 3))) +
+  xlab("Speed of Forgetting") +
+  theme_minimal()
+```
+
+# LASSO Analysis with Nested CV
+
+
+```{r}
+# Nested CGV with glmnet  
+set.seed(1234)
+ncv.fit <- nestcv.glmnet(y=Y, x=atanh(X), 
+                         family = "gaussian", 
+                         alphaSet = 10/10,
+                         type.measure="mae",
+                         standardize=T,
+                         grouped=F,
+                         nlambdas = 100,
+                         n_outer_folds = 5,
+                         n_inner_folds = 5,
+                         finalCV = T)
+ncv.fit
+
+out <- ncv.fit$output
+ggplot(out, aes(x=testy, y=predy)) +
+  geom_point() +
+  ggtitle("Nested Cross-Validation") +
+  theme_minimal()
+```
+
+That is not great, but we need to consider the full model:
+
+```{r, fig.width=4, fig.height=4}
+
+# Create a tibble with the original values Y and the predictions from the ncv.fit object
+yyhat <- tibble(y = Y, yhat = predict(ncv.fit$final_fit, X, s="lambda.min"))
+ggplot(yyhat, aes(x=y, y=yhat)) +
+  geom_point(size=3, color="darkgrey", alpha=0.75) +
+  
+  # Add diagonal identity line, grey and dashed 
+  
+  geom_abline(slope=1, intercept=0, col="black", linetype="dashed") +
+  stat_smooth(method="lm", col="blue", fill="blue") +
+  
+  # Make sure botgh axies have same scale and limits
+  coord_fixed(ratio=1, xlim=c(0.25, 0.38), ylim=c(0.25, 0.38)) +
+  
+  # add annotation with correlation value
+  annotate("text", x=0.3, y=0.325, 
+           label = paste("r(33) =",
+                         round(cor(yyhat$y, yyhat$yhat), 2))) +
+  
+  # change x anbd y labels to observed and predicted
+  xlab("Observed Speed of Forgetting") +
+  ylab("Predicted Speed of Forgetting") +
+  
+  # add title predicted vs observed \phi
+  ggtitle("Model Predictions vs. Data") +
+  theme_minimal()
+
+```
+
+
+
+
+## Analysis of the Connectivity 
+
+First, we need to properly name the connections we are analyzing. 
+
+```{r}
+connections <- outer(networks, 
+                     networks, 
+                     function(a, b) {paste(a, "to", b)})
+
+connections[upper.tri(connections, diag=T)] <- NA
+restricted <- connections[15:17,]
+restricted <- restricted[!is.na(restricted)]
+
+```
+
+Then, we filter out those that were set to zero by Lasso.
+
+```{r}
+# Get the list of non-zero regressors in Lasso
+#betas <- as.vector(coef(fit.cv, s=fit.cv$lambda.min))
+
+finalcoeff=ncv.fit$final_coef
+
+betas <- as_tibble(finalcoeff) %>%
+  add_column(code = rownames(finalcoeff))%>%
+  filter(!is.na(meanExp)) 
+
+brain <- tibble(connections = restricted,
+                from = substring(restricted, 1, 9),
+                region = substring(restricted, 14),
+                #beta = betas[2:46])
+                code = paste("V", 1:45, sep=""))
+
+
+brain <- inner_join(betas, brain)
+
+```
+
+And now, we can visualize the table:
+
+```{r}
+brain %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("hover", "striped"))
+
+```
+
+### Validation of the Model
+
+```{r}
+colnames(X) <- paste("V", 1:45, sep="")
+selected <-rownames(ncv.fit$final_coef)[2:13]
+Xprime <- X[,!colnames(X) %in% selected]
+
+# Nested CGV with glmnet  
+set.seed(1234)
+ncv.fit2 <- nestcv.glmnet(y=Y, x=atanh(Xprime), 
+                         family = "gaussian", 
+                         alphaSet = 10/10,
+                         type.measure="mae",
+                         standardize=T,
+                         grouped=F,
+                         nlambdas = 100,
+                         n_outer_folds = 5,
+                         n_inner_folds = 5,
+                         finalCV = T)
+ncv.fit2
+
+out2 <- ncv.fit2$output
+ggplot(out2, aes(x=testy, y=predy)) +
+  geom_point() +
+  ggtitle("Nested Cross-Validation") +
+  theme_minimal()
+```
+
+VIF
+
+```{r}
+Xmod <- X[,selected]
+vif <- vif(lm(Y ~ ., data = as.data.frame(Xmod)))
+ggplot(tibble(vif = vif, regressor=brain$connections), 
+       aes(x=regressor, y=vif)) +
+  geom_bar(stat="identity", fill="darkgrey") +
+  ggtitle("Variance Inflation Factors of the Model") +
+  ylab("VIF") +
+  ylim(0, 4.5) +
+  xlab("Predictors") +
+  theme_minimal() +
+  geom_label(aes(label=round(vif, 2)), 
+             nudge_y=0.3, 
+             size=3) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Visualization of the Connectivity
+
+TO visualize the connectivity, we need to create a different tibble.
+
+```{r}
+again <- outer(networks[15:17], 
+               c(networks, NA), 
+               function(a, b) {paste(a, "to", b)})
+
+again <- as.vector(again)
+seg <- tibble(connection = again,
+              from = substring(again, 1, 9),
+              region = substring(again, 14),
+              beta = rep(0, 54))
+
+seg$beta[seg$connection %in% brain$connections] <- brain$coef
+seg$region[seg$region == "NA"] <- NA
+seg <- seg %>%
+  mutate(beta = if_else(from == region, NA, beta))
+
+seg <- seg %>%
+  mutate(beta = if_else(is.na(region), 0, beta))
+
+```
+
+And now, visualization:
+
+```{r, fig.width=7, fig.height=5}
+library(ggseg)
+library(ggsegYeo2011)
+
+maxBeta <- max(abs(seg$beta), na.rm = T)
+
+ggplot(seg, aes(fill=beta)) +
+  geom_brain(atlas = ggsegYeo2011::yeo17, 
+             position = position_brain("horizontal"),
+             color="grey") +
+  scale_fill_gradient2(#limits=c(-maxBeta, maxBeta), 
+                       low = "royalblue", 
+                       high = "tomato2", 
+                       mid = "white",
+                       na.value="grey25") +
+  labs(fill = expression(beta)) +
+  facet_wrap(~from, ncol=1, nrow = 3,
+             labeller = labeller(from = ~paste("With", .x))) +
+  ggtitle("Network Connectivity Predictive of SoF") +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  theme(legend.key.width = unit(1.5, "cm"))
+
+ggsave("brain.png")
+```
+
+### Network Importance Within DMN 
+
+And now, network importance
+
+```{r, fig.width=7, fig.height=1.8}
+
+importance <- seg %>% 
+  group_by(from) %>%
+  summarize(importance = sum(abs(beta), na.rm=T)) %>%
+  mutate(region = from)
+
+ggplot(importance, aes(fill=importance)) +
+  geom_brain(atlas = ggsegYeo2011::yeo17, 
+             position = position_brain("horizontal"),
+             color="grey") +
+  # scale_fill_gradient2(#limits=c(-maxBeta, maxBeta), 
+  #                      low = "royalblue", 
+  #                      high = "tomato2", 
+  #                      mid = "white",
+  #                      na.value="white") +
+  #scale_fill_distiller(type="seq", palette="YlOrRd", 
+  #                     na.value="white", limits=c(min(importance$importance), 
+  #                                                max(importance$importance) + 0.01)) +
+  scale_fill_viridis_c(option="plasma", na.value = "white") +
+  labs(fill = "Importance") +
+  ggtitle("DMN Subnetwork Importance In Predicting SoF") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.key.width = unit(1.5, "cm"))
+
+```
+
+### Network Importance Outside DMN
+
+And now, network importance
+
+```{r, fig.width=7, fig.height=1.8}
+
+importance <- seg %>% 
+  group_by(region) %>%
+  summarize(importance = sum(abs(beta), na.rm=T)) %>%
+  filter(importance > 0)
+
+ggplot(importance, aes(fill=importance)) +
+  geom_brain(atlas = ggsegYeo2011::yeo17, 
+             position = position_brain("horizontal"),
+             color="grey") +
+  # scale_fill_gradient2(#limits=c(-maxBeta, maxBeta), 
+  #                      low = "royalblue", 
+  #                      high = "tomato2", 
+  #                      mid = "white",
+  #                      na.value="white") +
+  #scale_fill_distiller(type="seq", palette="OrRd", 
+  #                     na.value="white", limits=c(0, 0.2)) +
+  scale_fill_viridis_c(option="plasma", na.value="white") +
+  #scale_fill_distiller(type="seq", palette="YlOrRd", 
+  #                     na.value="white", limits=c(min(importance$importance), 
+  #                                                max(importance$importance) + 0.01)) +
+  labs(fill = "Importance") +
+  ggtitle("Importance of non-DMN Networks In Predicting SoF") +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.key.width = unit(1.5, "cm"))
+```
+
+## Associative vs Control
+
+```{r, fig.width=4.5, fig.height=3}
+
+brainstuff <- tibble(connections = restricted,
+                     from = substring(restricted, 1, 9),
+                     region = substring(restricted, 14))
+
+braintype <- full_join(brain, brainstuff) %>%
+  mutate(beta = if_else(is.na(coef), 0, coef))
+
+braintype %<>% mutate(Type = "Storage") %>%
+  mutate(Type = if_else(region %in% c("Control A",
+                                      "Control B"),
+                        "Retrieval", 
+                        Type)) %>%
+  filter(!region %in% c("Default A", "Default B", "Default C"))
+
+final <- braintype %>%
+  filter(!is.na(coef)) %>%
+  #filter(!region %in% c("Salience / Ventral Attention A")) %>%
+  group_by(region, Type) %>%
+  summarize(importance = sum(abs(beta)))
+
+ggplot(final, aes(y=Type, x=importance, col=Type, fill=Type)) +
+  geom_boxplot(aes(y=Type, x=importance, col=Type),
+               alpha=0.5, width=0.2) +
+  geom_point(size=3, alpha=0.5, col="black") +
+  geom_label_repel(aes(label=region),
+                   size=2, fill="white") +
+  xlab("Connectivity Importance") +
+  ylab("Memory Function") +
+  theme_minimal() +
+  scale_color_aaas() +
+  scale_fill_aaas() +
+  theme(legend.position = "none")
+
+t.test(importance ~ Type, data=final)
+```
+

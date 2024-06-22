@@ -1,0 +1,19 @@
+region,red,green,blue,alpha
+NONE,0,0,0,0
+Visual Central (Visual A),120,18,134,0
+Visual Peripheral (Visual B),255,0,0,0
+Somatomotor A,70,130,180,0
+Somatomotor B,42,204,164,0
+Dorsal Attention A,74,155,60,0
+Dorsal Attention B,0,118,14,0
+Salience / Ventral Attention A,196,58,250,0
+Salience / Ventral Attention B,255,152,213,0
+Limbic A,220,248,164,0
+Limbic B,122,135,50,0
+Control C,119,140,176,0
+Control A,230,148,34,0
+Control B,135,50,74,0
+Temporal Parietal,12,48,255,0
+Default C,0,0,130,0
+Default A,255,255,0,0
+Default B,205,62,78,0
