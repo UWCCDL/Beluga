@@ -96,7 +96,7 @@ ggplot(tibble(region=networks), aes(fill=region)) +
   theme(legend.position = "bottom") +
   guides(fill=guide_legend(ncol=4))
   
-ggsave("yeo17.png")
+ggsave("figures/yeo17.png")
 ```
 
 # Data Preparation
@@ -250,7 +250,7 @@ ggplot(mean_connectome, aes(x=From, y=To)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1),
         axis.text.y = element_text(angle = 0, hjust = 1))
 
-ggsave("mean_connectome.png")
+ggsave("figures/mean_connectome.png")
 ```
 
 ## Load the group-level data _X_
@@ -294,7 +294,7 @@ ggplot(defaults, aes(fill=value)) +
   ggtitle("Default Mode Networks in Yeo et al. (2011)") +
   theme_void() 
 
-ggsave("dmn-networks.png")
+ggsave("figures/dmn-networks.png")
 ```
 
 And here is how we create the regressor matrix _X_.
@@ -377,7 +377,7 @@ ggplot(dvs[keep,], aes(x=Alpha)) +
   xlab("Speed of Forgetting") +
   theme_minimal()
 
-ggsave("sof_distribution.png")
+ggsave("figures/sof_distribution.png")
 ```
 
 # LASSO Analysis with Nested CV
@@ -396,7 +396,7 @@ ncv.fit <- nestcv.glmnet(y=Y, x=atanh(X),
                          n_outer_folds = 5,
                          n_inner_folds = 5,
                          finalCV = T)
-ncv.fit
+#ncv.fit
 
 out <- ncv.fit$output
 ggplot(out, aes(x=testy, y=predy)) +
@@ -435,7 +435,7 @@ ggplot(yyhat, aes(x=y, y=yhat)) +
   ggtitle("Model Predictions vs. Data") +
   theme_minimal()
 
-ggsave("sof-distribution.png")
+ggsave("figures/predicted_vs_observed.png")
 ```
 
 
@@ -535,7 +535,7 @@ ggplot(tibble(vif = vif, regressor=brain$connections),
              size=3) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 
-ggsave("vif.png")
+ggsave("figures/vif.png")
 ```
 
 ### Visualization of the Connectivity
@@ -588,7 +588,7 @@ ggplot(seg, aes(fill=beta)) +
   theme(legend.position = "bottom") +
   theme(legend.key.width = unit(1.5, "cm"))
 
-ggsave("predictive-connectivity.png")
+ggsave("figures/predictive-connectivity.png")
 ```
 
 ### Network Importance Within DMN 
@@ -613,7 +613,7 @@ ggplot(importance, aes(fill=importance)) +
   theme(legend.position = "bottom",
         legend.key.width = unit(1.5, "cm"))
 
-ggsave("dmn-importance.png")
+ggsave("figures/dmn-importance.png")
 
 ```
 
@@ -649,7 +649,7 @@ ggplot(importance, aes(fill=importance)) +
   theme(legend.position = "bottom",
         legend.key.width = unit(1.5, "cm"))
 
-ggsave("non-dmn-importance.png")
+ggsave("figures/non-dmn-importance.png")
 ```
 
 ## Associative vs Control
