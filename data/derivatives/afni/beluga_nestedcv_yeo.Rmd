@@ -34,6 +34,7 @@ library(ggsci)
 library(nestedcv)
 library(car)
 library(ggrepel)
+library(viridis)
 ```
 
 # Rationale
@@ -56,6 +57,103 @@ According to the retrieval failure framework, however, forgetting occurs because
 
 Because the two theories make different predictions, it should be possible to empirically test them by examining which features of individual anatomy and functional connectivity co-vary with individual differences in forgetting. One important obstacle, however, remains: it is extremely difficult to quantify forgetting in the first place. As noted above, forgetting is only observed when participants fail to correctly recall or recognize an item in a memory test. Because forgetting itself is unobservable, performance failure is the only ground truth available. Unfortunately, this carries significant limitations. First, common behavioral measures such as the proportion of correctly remembered items are prone to statistical misinterpretations (Brady et al., 2023; Loftus, 1978). Second, performance in memory tests is also affected by the specifics of the paradigms used. For example, memory performance differs greatly when the same materials are tested using recognition or recall; recognition is generally easier, but recall, being more effortful, leads to better consolidation and retention. Finally, most laboratory tests fail to capture the temporal dynamics of forgetting. Forgetting is a process, but it is tested only at a specific snapshot in time, and there is no consensus on how long after encoding a memory should be tested. Because long-term memory retention which spans from seconds to decades, it is difficult to test it in a laboratory setting. Consequently, previous studies have relied on individuals exhibiting dramatic differences in memory function, such as amnesic patients (such as patients suffering from medial temporal lobe injury: (Corkin, 2002; Gabrieli et al., 1988; Scoville & Milner, 1957)). Conversely, most laboratory experiments focus on relatively short retention intervals. Two participants, however, might have comparable memory performance a few minutes after studying but vastly different performances weeks later.
 The goal of this study is to overcome these limitations by using an innovative, model-based approach to formally quantify individual differences in forgetting in a sample of healthy individuals for whom functional connectivity data are available. Analyzing which connectivity features predict individual differences in forgetting would empirically test  storage decay and retrieval failure theories.
+
+# Model
+
+In this model, the probability of retrieving a memory m at time t is proportional to its activation A(m, t), a scalar quantity that reflects a memory’s absolute availability. As in the multiple trace theory (Moscovitch et al., 2005; Nadel et al., 2000), each memory m is associated with multiple episodic traces, each of which corresponds to a specific event in which m was retrieved or (re)encoded, and each of which decays over time.
+
+
+## Example
+
+This figure below shows the relationship between activation of a memory and the odds of its component traces. It tracks the activation over time of a memory that has been encoded in three different episodes, at times t = 1, 18, and 75 seconds. Each episode leaves an independent fading trace with a characteristic decay rate (colored lines). The total activation of the memory is the sum of the decaying traces (gray line).
+
+
+```{r, fig.width=4, fig.height=2.5}
+trace_odds <- function(t, te, d, ceil=5) {
+  y <- (t - te) ^ -d
+  y[t < te] <- 0
+  y[y == Inf] <- ceil
+  y
+}
+
+activation <- function(t, traces=c(0), sof=0.3, c=0.5) {
+  y <- rep(0, length(t))
+  d <- NULL
+  for (te in traces) {
+    d <- c * y[t==te] + sof
+    y <- y + trace_odds(t, te, d)
+  }
+  log(y)
+}
+
+t <-  seq(0, 100, 0.1) 
+
+traces <- c(1, 18, 75) 
+
+data <- NULL
+bias <- 0.25
+y <- rep(0, length(t))
+d <- 0
+sof <- 0.3
+counter <- 1
+for (te in traces) {
+  d <- bias * y[t==te] + sof
+  odds <- trace_odds(t, te, d, ceil=3)
+  partial <- tibble(Time=t, Odds = odds, SoF = rep(d, length(t)), Name = paste("Trace", counter))
+  if (is.null(data)) {
+    data <- partial
+  } else {
+    data <- rbind(data, partial)
+  }
+  counter <- counter + 1
+  y <- y + odds
+}
+
+data$Odds[data$Odds == 0] <- NA
+data$SoF <- round(data$SoF, 2)
+
+memory_data <-tibble(Time=t, Activation = y, Name="Memory") 
+
+point_data <- tibble(Time = traces,  Odds=3,
+                     Name = paste("Trace ", 1:3),# ", ",  "d = ", unique(data$SoF), sep=""), 
+                     SoF = unique(data$SoF))
+
+p1 <- ggplot(data, aes(x=Time, y=Odds)) +
+  scale_color_viridis(option="plasma", discrete=T, end=0.75) +
+  geom_line(data=memory_data, 
+            aes(x=Time, y=Activation, col=Name),
+            col="black", size=1.5, alpha=0.25, show_guide=T) +
+  geom_line(aes(group=SoF, color=as.factor(SoF)), show_guide=F) +
+  geom_point(data=point_data, aes(x=Time, y=Odds, col=as.factor(SoF)), show_guide=F) +
+  geom_label_repel(data=point_data, aes(x=Time, y = Odds, label=Name, col=as.factor(SoF)), show_guide=F) +
+  ylab("Acxtivation") +
+  xlab("Time (s)") +
+#  scale_y_log10()
+  annotate(geom="label", x=35, y=1, label="Memory", 
+           col="grey", show_guide=F, label.size=1) +
+  #labs(col="Trace Decay") +
+  ggtitle("Memory and Component Traces") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        axis.text.y = element_blank())
+
+p1 
+ggsave("figures/model.png")
+  
+```
+
+ 
+## Formal Model
+
+The activation of each trace decays as a power function of time, and the activation of $m$ is the log sum of the decaying activations of all its traces:
+
+$A(m, t) = \log \sum_i (t - t_i)^{-d_i}$
+
+where $t_i$ and $d_i$ are, respectively, the time of the creation of the i-the trace and its characteristic decay rate. A trace’s decay rate, in turn, is related to the m’s activation at the moment each trace is created, thus capturing the fact that traces with higher initial activation decay faster than traces with lower activation (Pavlik & Anderson, 2005). Specifically:
+
+$d_i = e^{A(m, t_i)} + \phi$
+
+with $A(m, t_i)$ being the activation of $m$ at the moment the $i$-th trace was encoded. Thus, if the times at which a memory m has been encoded, re-encoded, and retrieved are known and controlled for, its activation depends only on $\phi$, which is the only free parameter in the above equations and, by determining the decay of each memory, was taken to represent an individual-specific __speed of forgetting__.
 
 
 # Analysis of Functional Connectivity in Beluga
@@ -654,6 +752,8 @@ ggsave("figures/non-dmn-importance.png")
 
 ## Associative vs Control
 
+
+
 ```{r, fig.width=4.5, fig.height=3}
 
 brainstuff <- tibble(connections = restricted,
@@ -670,9 +770,50 @@ braintype %<>% mutate(Type = "Storage") %>%
                                       "Salience / Ventral Attention B"),
                         "Retrieval", 
                         Type)) %>%
-  filter(!region %in% c("Default A", "Default B", "Default C"))
+  mutate(Type = if_else(region %in% c("Default A",
+                                      "Default B",
+                                      "Default C"),
+                        "DMN", 
+                        Type))
 
+```
+
+These are the different connectivity patterns predicted by the two theories.
+
+```{r, fig.width=7, fig.height=1.8}
+classified <- tibble(region = networks) %>%
+  mutate(Type = "Storage") %>%
+  mutate(Type = if_else(region %in% c("Control A",
+                                      "Control B",
+                                      "Limbic B",
+                                      "Salience / Ventral Attention B"),
+                        "Retrieval", 
+                        Type)) %>%
+  mutate(Type = if_else(region %in% c("Default A",
+                                      "Default B",
+                                      "Default C"),
+                        "DMN", 
+                        Type)) 
+
+ggplot(classified, aes(fill=Type)) +
+  geom_brain(atlas = ggsegYeo2011::yeo17, 
+             position = position_brain("horizontal"),
+             color="white", size=0.2) +
+  scale_fill_jama(na.value="grey") +
+  labs(fill = "Type") +
+  ggtitle("Large Scale Networks Associated with Memory Retrieval or Storage") +
+  theme_void() +
+  theme(legend.position = "bottom") +
+  theme(legend.key.width = unit(1.5, "cm"))
+```
+
+And now, let's look at our results.
+
+
+
+```{r, fig.width=7, fig.height=2.5}
 final <- braintype %>%
+  filter(!region %in% c("Default A", "Default B", "Default C")) %>%
   filter(!is.na(coef)) %>%
   #filter(!region %in% c("Salience / Ventral Attention A")) %>%
   group_by(region, Type) %>%
@@ -688,9 +829,11 @@ ggplot(final, aes(y=Type, x=importance, col=Type, fill=Type)) +
   ylab("Putative Memory Function") +
   ggtitle("Network Importance by Function") +
   theme_minimal() +
-  scale_color_aaas() +
-  scale_fill_aaas() +
+  scale_color_d3() +
+  scale_fill_d3() +
   theme(legend.position = "none")
+
+ggsave("figures/associative-vs-control.png")
 ```
 
 Is the difference between the two groups significant? We can run a T test.
