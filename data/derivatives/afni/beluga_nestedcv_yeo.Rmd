@@ -36,10 +36,33 @@ library(car)
 library(ggrepel)
 ```
 
+# Rationale
+
+despite considerable progress in memory research, we still struggle to understand how and why memories are lost and forgotten.
+In fact, researchers disagree even about when and how forgetting takes place. Consider, for example, the three-stage model of a memory’s lifecycle, which is often used in cognitive research. In this idealized depiction, memories are first encoded as engrams in the hippocampus (synaptic consolidation); then undergo a period of consolidation (system consolidation); and they are finally retrieved at some later time—which can vary from minutes to years. Because forgetting is only inferred after a failed retrieval attempt, it is difficult to pinpoint at which of the earlier stages it really occurred. Specifically, researchers disagree on whether forgetting is a process that is best thought of as occurring during the consolidation or retrieval stages. 
+
+According to the __storage decay__ class of theories, forgetting is a process that mostly affects consolidation. In this view, engrams are intrinsically labile and accumulate progressive damage over time. Such damage could be due, for example, to biological decay processes (Davis & Zhong, 2017; Hardt et al., 2013). It could also be due to the engram’s synapses being partially overwritten by the encoding of additional traces (a form of catastrophic interference). Finally, it has been suggested that spontaneous brain activity might play a pivotal role in consolidating memories (Pezzulo et al., 2021), and that its disruption might underpin abnormal forgetting in amnestic neurodegeneration (Jin et al., 2012; Qi et al., 2018). 
+
+According to the __retrieval failure__ class of theories, engrams are relatively stable over long intervals, and forgetting is instead driven by an inability to access and retrieve them. As in the case of storage decay, multiple processes have been hypothesized to explain retrieval failure. For example, memories might become less accessible because of the accumulation of more memories that compete for retrieval (retrieval interference). Since controlled memory retrieval is underpinned by the prefrontal cortex, it is possible that loss of connections between prefrontal cortices and the hippocampus render some memories inaccessible. Evidence for these theories comes from the fact that direct neurostimulation can re-awaken long-forgotten memories, a fact that has been reported in humans (Penfield, 1968) and, more recently, in animal models of Alzheimer’s Disease (Roy et al., 2016)
+
+## Implications and Predictions of Storage Decay vs. Retrieval Failure 
+
+The distinction between these two families of theories is not only academic, and it has important implications for memory research and for clinical practice. Consider, for example, the dramatic form of abnormal forgetting that is Alzheimer’s Disease (AD). If the storage decay theory is correct, the promising new clinical treatments that remove amyloid beta deposits (e.g., (Cummings et al., 2023; Swanson et al., 2021)) would stop the progression of the disease but would not restore memory function and would not bring back lost memories, as the underlying neural substrate has already been compromised. But according to the retrieval failure hypothesis, at least some lost memories might be retrievable, and function would be at least partially restored. Knowing which theory is correct, therefore, is important to guide treatment and future clinical research. 
+
+Fortunately, these two theories can be empirically tested because they make different predictions. According to the storage decay framework, forgetting should be associated with reduced gray matter densities in regions devoted to engram encoding, such as the hippocampus and the parahippocampal cortex, or with reduced the functional connectivity between regions involved in memory encoding and consolidation, such as those belonging to the Default Mode Network (DMN: (Kaefer et al., 2022; Raichle, 2015)), or between DMN regions and cortical association areas, where long-term memories might be stored as the end-product of consolidation (Alvarez & Squire, 1994; McClelland et al., 1995; O’Reilly et al., 2014).
+According to the retrieval failure framework, however, forgetting occurs because of an inability to properly access previously stored memories. Because the retrieval process is controlled by prefrontal cortices, the theory predicts that greater forgetting should be associated with anatomical differences in regions related to executive control, most notably the lateral and medial prefrontal cortices (Badre & Wagner, 2007; Lepage et al., 2000; Petrides, 2002; Thompson-Schill et al., 1997). At the level of functional connectivity, it similarly predicts that greater forgetting should be associated with reduced functional connectivity between prefrontal regions and memory encoding regions.
+
+## Obstacles to the Testing the Theories 
+
+Because the two theories make different predictions, it should be possible to empirically test them by examining which features of individual anatomy and functional connectivity co-vary with individual differences in forgetting. One important obstacle, however, remains: it is extremely difficult to quantify forgetting in the first place. As noted above, forgetting is only observed when participants fail to correctly recall or recognize an item in a memory test. Because forgetting itself is unobservable, performance failure is the only ground truth available. Unfortunately, this carries significant limitations. First, common behavioral measures such as the proportion of correctly remembered items are prone to statistical misinterpretations (Brady et al., 2023; Loftus, 1978). Second, performance in memory tests is also affected by the specifics of the paradigms used. For example, memory performance differs greatly when the same materials are tested using recognition or recall; recognition is generally easier, but recall, being more effortful, leads to better consolidation and retention. Finally, most laboratory tests fail to capture the temporal dynamics of forgetting. Forgetting is a process, but it is tested only at a specific snapshot in time, and there is no consensus on how long after encoding a memory should be tested. Because long-term memory retention which spans from seconds to decades, it is difficult to test it in a laboratory setting. Consequently, previous studies have relied on individuals exhibiting dramatic differences in memory function, such as amnesic patients (such as patients suffering from medial temporal lobe injury: (Corkin, 2002; Gabrieli et al., 1988; Scoville & Milner, 1957)). Conversely, most laboratory experiments focus on relatively short retention intervals. Two participants, however, might have comparable memory performance a few minutes after studying but vastly different performances weeks later.
+The goal of this study is to overcome these limitations by using an innovative, model-based approach to formally quantify individual differences in forgetting in a sample of healthy individuals for whom functional connectivity data are available. Analyzing which connectivity features predict individual differences in forgetting would empirically test  storage decay and retrieval failure theories.
+
+
 # Analysis of Functional Connectivity in Beluga
 
-First, we need to explicitly label the Yeo (2011) network parcels that were used
-to extract the time series from every participant.
+To calculate functional connectivity, each participant's brain was divided into discrete regions using the network parcellation originally proposed by Yeo et al (Yeo et al. 2011). This parcellation scheme divides the brain into 17 networks, each of which is thought to be involved in a different aspect of cognition. The networks are named as follows: Visual A, Visual B, Somatomotor A, Somatomotor B, Dorsal Attention, Ventral Attention, Limbic, Frontoparietal, Default A, Default B, Default C, Temporal Parietal, Temporal Occipital, Cingulo Opercular, Cingulo Parietal, Salience, and Subcortical.
+
+This information is stored in the `yeo.csv` file.
 
 ```{r}
 yeo17networks <- read_csv("yeo17.csv", show_col_types = F)
@@ -59,7 +82,7 @@ names(yeo17colors) <- networks
 And, finally, we can visualize the Yeo parcellation using the original color 
 scheme.
 
-```{r}
+```{r, fig.width=7, fig.height=3.5}
 # Visualize the Yeo parcellation
 ggplot(tibble(region=networks), aes(fill=region)) +
   geom_brain(atlas = ggsegYeo2011::yeo17, 
@@ -73,16 +96,14 @@ ggplot(tibble(region=networks), aes(fill=region)) +
   theme(legend.position = "bottom") +
   guides(fill=guide_legend(ncol=4))
   
+ggsave("yeo17.png")
 ```
 
 # Data Preparation
 
 ## Extracting Individual Connectomes
 
-Now we need to create the functional connectivity matrix (the "connectome") for
-every single participant in the dataset. In this case, the connectome is a 17x17
-matrix containing the correlations between the time series of every pair of 
-networks.
+Each participant’s global pattern of brain connectivity, known as the connectome (Sporns, 2011), was extracted using a standard procedure (Cole et al., 2016; Shen et al., 2017). For each of the 17x17 pairs, the Pearson correlation coefficient between the respective timeseries was computed. 
 
 In fact, we will create _two_ such connectomes: one using standard Pearson 
 correlation coefficients (matrix `R`) and one using partial correlation 
@@ -174,8 +195,10 @@ if (CREATE_FC) {
 
 ## Checking patterns of connectivity
 
-One the connectomes have been created, we can visualize the average 
-connectivity.
+The group-average of the resulting matrices shows a canonical distribution of r values, including the zones of maximum r values along the diagonal (corresponding to connectivity within the same networks). This pattern is entirely consistent with previous findings using the same parcellation scheme.
+
+One problem with this canonical connectome is that the raw correlation coefficients are almost all positive and partially driven by common, correlated factors. To remove these confounds, we followed the procedure of Cole et al. (2016), and recalculated the correlation matrices using partial correlation coefficients, so that, when computing the correlation between two networks, the correlations between each network in the pair and the remaining 15 networks were partialled out. The resulting average connectome is sparser and includes both negative and positive correlations (Cole et al., 2016; Fox et al., 2005), giving a clearer picture of the underlying functional organization.
+
 
 ```{r}
 ## Load each subject's PR matrix and average them together after removing the diagonal and Z-transforming all the values
@@ -227,10 +250,10 @@ ggplot(mean_connectome, aes(x=From, y=To)) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1),
         axis.text.y = element_text(angle = 0, hjust = 1))
 
-  
+ggsave("mean_connectome.png")
 ```
 
-## Load the group-level data
+## Load the group-level data _X_
 
 We now need to load the group level data. To apply ML methods, we need the data 
 from all participants to be put into a matrix _X_ in which every individual is a 
@@ -244,7 +267,7 @@ other networks. This will results in 3 x 16 - 3 = 45 regressors.
 
 Here are the three networks.
 
-```{r}
+```{r, fig.width=4, fig.height=3}
 ## Creates a tibble where every regions is marked as NA 
 
 defaults <- tibble(region = networks,
@@ -264,13 +287,14 @@ defaults$value[defaults$region == "Default C"] <- "Default C"
 ggplot(defaults, aes(fill=value)) +
   geom_brain(atlas = ggsegYeo2011::yeo17, 
              position = position_brain(hemi ~ side),
-             color="white") +
-  scale_fill_brewer(type = "qual", palette = "Set2", na.value="lightgrey") +
+             color="lightgrey") +
+  #scale_fill_brewer(type = "qual", palette = "Accent", na.value="white") +
+  scale_fill_d3() +
   labs(fill = "Network") +
-  ggtitle("Default Mode Networks in Yeo et al. (2011") +
+  ggtitle("Default Mode Networks in Yeo et al. (2011)") +
   theme_void() 
 
-ggsave("defaults.png")
+ggsave("dmn-networks.png")
 ```
 
 And here is how we create the regressor matrix _X_.
@@ -313,17 +337,18 @@ for (sub in dir()[grep("sub-*", dir())]) {
   }
   j <- j + 1
 }
-
 ```
 
 
-## Load the dependent variable $Y$: The Speed of Forgetting
+## Load the dependent variable _Y_: The Speed of Forgetting
 
 Now we need to load the dependent variable _Y_. In this case, the variable is 
-the speed of forgetting $phi$, which is stored as part of the participants' 
+the speed of forgetting $\phi$, which is stored as part of the participants' 
 meta-data in `participats.tsv`. 
 
-Note that we could not measure $phi$ for all participants, so we have to keep
+Individual values for the SOF parameter were calculated for each individual by averaging across the SOF values of each word pair they studied. 
+
+Note that we could not measure $\phi$ for all participants, so we have to keep
 track of which rows in the $X$ regressor matrix we want to exclude from our 
 LASSO analysis.
 
@@ -334,7 +359,7 @@ Y <- dvs$Alpha[keep]
 X <- X[keep,]
 ```
 
-And this is what the distribution of SOF values looks like:
+The resulting values ranged from `r min(Y)` to `r max(Y)`, with a mean of `r mean(Y)` and standard deviation of `sd(Y)`. Both the mean and the range of values are in line with previously published studies (Sense et al., 2016; Zhou et al., 2021). And this is what the distribution of SOF values looks like:
 
 ```{r, fig.width=4, fig.height=4}
 ggplot(dvs[keep,], aes(x=Alpha)) +
@@ -351,6 +376,8 @@ ggplot(dvs[keep,], aes(x=Alpha)) +
                          round(mean(dvs$Alpha[keep]), 3))) +
   xlab("Speed of Forgetting") +
   theme_minimal()
+
+ggsave("sof_distribution.png")
 ```
 
 # LASSO Analysis with Nested CV
@@ -408,12 +435,11 @@ ggplot(yyhat, aes(x=y, y=yhat)) +
   ggtitle("Model Predictions vs. Data") +
   theme_minimal()
 
+ggsave("sof-distribution.png")
 ```
 
 
-
-
-## Analysis of the Connectivity 
+## Predictive Connectivity 
 
 First, we need to properly name the connections we are analyzing. 
 
@@ -432,7 +458,6 @@ Then, we filter out those that were set to zero by Lasso.
 
 ```{r}
 # Get the list of non-zero regressors in Lasso
-#betas <- as.vector(coef(fit.cv, s=fit.cv$lambda.min))
 
 finalcoeff=ncv.fit$final_coef
 
@@ -457,12 +482,16 @@ And now, we can visualize the table:
 brain %>%
   kable() %>%
   kable_styling(bootstrap_options = c("hover", "striped"))
-
 ```
 
-### Validation of the Model
+## Validation of the Model
 
-```{r}
+Given equally valid predictors, the penalty term might sometimes force the LASSO algorithm to select one of them at random, providing an inadequate and partial picture of which regressors are indeed essential. If this were the case, other equally valid predictors would have been overlooked. A simple test to exclude this possibility  is to remove the 12 connections from the original matrix of 45 regressors X, and re-run the cross-validation procedure. If the procedure converges on a different and equally successful solution, then other important regressors were accidentally excluded.
+
+When applied to our data, this test shows that the nested cross-validation procedure does not converge anymore. Specifically, it selects a larger hyperparameter ($\lambda$ = 0.0103) and fails to identify any consensus regressors; under these conditions, the resulting linear model reduces to the intercept and fails to capture any individual differences in forgetting.
+
+
+```{r, fig.width=4, fig.height=4}
 colnames(X) <- paste("V", 1:45, sep="")
 selected <-rownames(ncv.fit$final_coef)[2:13]
 Xprime <- X[,!colnames(X) %in% selected]
@@ -488,7 +517,7 @@ ggplot(out2, aes(x=testy, y=predy)) +
   theme_minimal()
 ```
 
-VIF
+A second test consists of measuring the collinearity of the resulting model. Since the number of predictors in the model (_p_ = 12) is comparable to the number of observations (_n_ = 33), it is possible that the surviving regressors are highly collinear, which would suggest that all connections in the brain contain similar information and are similarly related to the rate of forgetting. To exclude this hypothesis, the reduced model was examined using the Variance Inflation Factors (VIF) metric as implemented in R’s car package (Fox & Weisberg, 2018). As a rule of thumb, VIF factors > 10 indicate collinearity (Fox & Monette, 1992). All of the predictors had a VIF value < 4, which suggest that they contributed independently to an individual rate of forgetting. 
 
 ```{r}
 Xmod <- X[,selected]
@@ -505,6 +534,8 @@ ggplot(tibble(vif = vif, regressor=brain$connections),
              nudge_y=0.3, 
              size=3) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggsave("vif.png")
 ```
 
 ### Visualization of the Connectivity
@@ -557,12 +588,12 @@ ggplot(seg, aes(fill=beta)) +
   theme(legend.position = "bottom") +
   theme(legend.key.width = unit(1.5, "cm"))
 
-ggsave("brain.png")
+ggsave("predictive-connectivity.png")
 ```
 
 ### Network Importance Within DMN 
 
-And now, network importance
+The resulting connectivity matrix can also be analyzed in terms of network-level measures, such as the importance of a region within the brain. The importance of a region can be calculated as the L1 norm of all of its connections to other networks. The importance of each DMN subnetwork region is visualized below This visualization highlights the prominence of DMN subnetwork B. This network includes the hippocampus and parahippocampal cortices, which are traditionally considered the earlier trace encoding hubs in the memory network. 
 
 ```{r, fig.width=7, fig.height=1.8}
 
@@ -575,20 +606,14 @@ ggplot(importance, aes(fill=importance)) +
   geom_brain(atlas = ggsegYeo2011::yeo17, 
              position = position_brain("horizontal"),
              color="grey") +
-  # scale_fill_gradient2(#limits=c(-maxBeta, maxBeta), 
-  #                      low = "royalblue", 
-  #                      high = "tomato2", 
-  #                      mid = "white",
-  #                      na.value="white") +
-  #scale_fill_distiller(type="seq", palette="YlOrRd", 
-  #                     na.value="white", limits=c(min(importance$importance), 
-  #                                                max(importance$importance) + 0.01)) +
   scale_fill_viridis_c(option="plasma", na.value = "white") +
   labs(fill = "Importance") +
   ggtitle("DMN Subnetwork Importance In Predicting SoF") +
   theme_void() +
   theme(legend.position = "bottom",
         legend.key.width = unit(1.5, "cm"))
+
+ggsave("dmn-importance.png")
 
 ```
 
@@ -623,6 +648,8 @@ ggplot(importance, aes(fill=importance)) +
   theme_void() +
   theme(legend.position = "bottom",
         legend.key.width = unit(1.5, "cm"))
+
+ggsave("non-dmn-importance.png")
 ```
 
 ## Associative vs Control
@@ -638,7 +665,9 @@ braintype <- full_join(brain, brainstuff) %>%
 
 braintype %<>% mutate(Type = "Storage") %>%
   mutate(Type = if_else(region %in% c("Control A",
-                                      "Control B"),
+                                      "Control B",
+                                      "Limbic B",
+                                      "Salience / Ventral Attention B"),
                         "Retrieval", 
                         Type)) %>%
   filter(!region %in% c("Default A", "Default B", "Default C"))
@@ -656,12 +685,29 @@ ggplot(final, aes(y=Type, x=importance, col=Type, fill=Type)) +
   geom_label_repel(aes(label=region),
                    size=2, fill="white") +
   xlab("Connectivity Importance") +
-  ylab("Memory Function") +
+  ylab("Putative Memory Function") +
+  ggtitle("Network Importance by Function") +
   theme_minimal() +
   scale_color_aaas() +
   scale_fill_aaas() +
   theme(legend.position = "none")
+```
 
-t.test(importance ~ Type, data=final)
+Is the difference between the two groups significant? We can run a T test.
+
+```{r}
+t.test(importance ~ Type, data=final) %>%
+  tidy() %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("hover", "striped"))
+```
+
+And, just to be sure, a Wilcoxon Test:
+
+```{r}
+wilcox.test(importance ~ Type, data=final) %>%
+  tidy() %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("hover", "striped"))
 ```
 
